@@ -1,0 +1,5 @@
+/target
+**/*.rs.bk
+.DS_Store
+*.osm-cache.xml
+/libWMM/libWMM.xcodeproj/project.xcworkspace/xcuserdata/erik.xcuserdatad/UserInterfaceState.xcuserstate
