@@ -25,7 +25,25 @@ fn ftell(file: &mut dyn Seek) -> u32 {
     file.seek(SeekFrom::Current(0)).expect("Unable to obtain file position").try_into().expect("File size too large")
 }
 
-use super::sweref_to_wgs84::Sweref;
+use super::sweref_to_wgs84::Sweref as Point;
+
+#[derive(Clone)]
+pub enum Segment {
+    Move(Point),
+    Bezier(Point,Point,Point),
+    Line(Point),
+}
+
+impl Segment {
+    
+    fn ends(&self) -> &Point {
+        match self {
+            Segment::Move(p) => &p,
+            Segment::Bezier(_,_,p) => &p,
+            Segment::Line(p) => &p,
+        }
+    }
+}
 
 pub enum ObjectType {
     Point,
@@ -35,15 +53,63 @@ pub enum ObjectType {
 }
 
 pub struct Object {
-    object_type: ObjectType,
-    color: u16,
-    coordinates: Vec<(f64,f64)>,
+    pub object_type: ObjectType,
+    pub symbol_number: u32,
+    pub segments: Vec<Segment>,
 }
 
 struct Strings {
     s: Vec<u8>,
     record_type: i32,
 }
+ 
+// impl Object {
+
+//     pub fn clip_to_bounds(&mut self, sw: &Point, ne: &Point) {
+//         if self.segments.len() == 0 { return }
+
+//         let is_outside = |p: &Point| p.east < sw.east || p.east > ne.east || p.north < sw.north || p.north > ne.north;
+//         let mut new_segments = Vec::new();
+//         let previous_was_outside: Option<bool> = None;
+//         let current_point: Option<Point> = None;
+
+//         for (i, segment) in self.segments.iter().enumerate() {
+//             let outside = is_outside(segment.ends());
+//             let mut first = true;
+//             match previous_was_outside {
+//                 Some(true) if outside => {
+//                     current_point = Some(segment.ends().clone());
+//                 },
+//                 Some(true) if !outside => {
+//                     // We wee outside, but are moving into the area. 
+//                     match segment {
+//                         Segment::Move(p) => { new_segments.push(segment); },
+//                         Segment::Line(p) => { // Move to edge, then line
+//                             // Use line intersection crate?
+//                             // Also "flo_curves" for fit_curve_cubic. och solve_curve_for_t.
+//                     }
+//                 },
+//                 Some(false) if !outside {
+
+//                 },
+//             }
+//                 true if previous_was_outside.is_none() => continue, // First segment, and outside
+//                 false if previous_was_outside.is_none() => 
+
+//             }
+//             if this != previous {
+
+//             } else 
+//         }
+//     }
+
+//     fn polys(&self, sw: &Point, ne: &Point) -> Vec<TDPoly> {
+
+//         let mut p = Vec::new();
+
+        
+//     }
+// }
 
 fn load_from_isom() -> (Vec<Vec<u8>>, Vec<Strings>) {
     let mut data = Cursor::new(SOFT_ISOM_2017);
@@ -95,7 +161,7 @@ fn load_from_isom() -> (Vec<Vec<u8>>, Vec<Strings>) {
     (symbols, strings.into_iter().filter(|x| match x.record_type { 9 | 10 => true, _ => false }).collect())
 }
 
-pub fn create(path: &str, southwest_corner: Sweref, northeast_corner: Sweref, angle: f64, queue: Receiver<Object>, finalize: Receiver<bool>) {
+pub fn create(path: &str, southwest_corner: Point, northeast_corner: Point, angle: f64, queue: Receiver<Object>, finalize: Receiver<bool>) {
     let (mut soft_symbols, mut soft_strings) = load_from_isom();
 
     let x0 = (northeast_corner.east + southwest_corner.east)*0.5;

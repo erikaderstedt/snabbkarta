@@ -9,6 +9,7 @@ use colored::*;
 use std::io;
 use osm::Node;
 use super::ocad;
+use super::geometry;
 
 fn resolve_way<'a>(way: &'a osm::Way, doc: &'a osm::OSM) -> Vec<&'a Node> {
     way.nodes.iter().filter_map(|unresolved_reference| 
@@ -18,27 +19,95 @@ fn resolve_way<'a>(way: &'a osm::Way, doc: &'a osm::OSM) -> Vec<&'a Node> {
         }).collect()
 }
 
-fn polys_from_nodes(nodes: &Vec<&Node>) -> Vec<Sweref> {
+fn to_sweref(nodes: &Vec<&Node>) -> Vec<Sweref> {
     nodes.iter().map(|node| Sweref::from_wgs84( &Wgs84 { latitude: node.lat, longitude: node.lon } )).collect()
 }
 
-fn post_way(ways: Vec<Vec<&Node>>, symbols: (Option<u32>, Option<u32>, bool), post_box: &mut Sender<ocad::Object>, sw: Sweref, ne: Sweref) {
-
+fn post_way(ways: Vec<Vec<&Node>>, symbols: (Option<u32>, Option<u32>, bool), post_box: &Sender<ocad::Object>, bounding_box: &Vec<geometry::LineSegment>) {
+    let sw = &bounding_box[0].p0;
+    let ne = &bounding_box[2].p0;
     let outside = |vertex: &Sweref| vertex.east < sw.east || vertex.east > ne.east || vertex.north > ne.north || vertex.north < sw.north;
+    let intersect = |segment: &geometry::LineSegment| { bounding_box.iter()
+        .filter_map(|edge| edge.intersection_with(&segment))
+        .next()
+        .expect("No intersection with bounding box edge") };
 
     if let Some(stroke_symbol_number) = symbols.0 {
-        // First is outer, subsequent ones are inner. 
         for way in ways.iter() {            
-            let vertices = polys_from_nodes(&way);
-            let mut v = vertices.iter().enumerate().skip_while(|x| outside(x.1));
-            
+            let vertices = to_sweref(&way);
+            if vertices.len() == 0 { continue }
 
-            let clipped_vertices = vertices.iter().enumerate().filter_map(|vertex_info|
+            // if first vertex is outside, skip until *next* is inside. 
+            let first_inside = match vertices.iter().enumerate().skip_while(|x| outside(x.1)).next() {
+                Some(x) => x.0,
+                None => continue, // No points are inside. We can skip the whole way.
+            };
+            let mut current_point = match first_inside {
+                0 => vertices[0].clone(),
+                i => {
+                    let p0 = vertices[i-1].clone();
+                    let p1 = vertices[i].clone();
+                    let segment = geometry::LineSegment::create(&p0, &p1);
+                    intersect(&segment)
+                }
+            };
 
-                
+            let mut segments = Vec::new();
+            segments.push(ocad::Segment::Move(current_point.clone()));
+            let mut is_outside = false;
 
-            // If vertex is inside
+            for vertex in vertices.iter().skip(first_inside) {
+                let this_is_outside = outside(vertex);
+                match (is_outside, this_is_outside) {
+                    (false, true) => { // Going outside
+                        let segment = geometry::LineSegment::create(&current_point, vertex);
+                        segments.push(ocad::Segment::Line(intersect(&segment)));
+                    },
+                    (true, false) => { // Going inside
+                        let segment = geometry::LineSegment::create(&current_point, vertex);
+                        segments.push(ocad::Segment::Move(intersect(&segment)));
+                        segments.push(ocad::Segment::Line(vertex.clone()));
+                    },
+                    (false,false) => { // Only inside
+                        segments.push(ocad::Segment::Line(vertex.clone()));
+                    },
+                    (true,true) => { continue }, // Only outside
+                }
+                current_point = vertex.clone();
+                is_outside = this_is_outside;
+            }
+
+            post_box.send( ocad::Object {
+                object_type: ocad::ObjectType::Area,
+                symbol_number: stroke_symbol_number,
+                segments: segments,
+            }).expect("Unable to post OSM object to OCAD.");
         }
+    }
+
+    if let Some(fill_symbol_number) = symbols.1 {
+        // TODO: cut these too!
+        
+        // First way is the main, subsequent ways are holes.
+        let mut segments = Vec::new();
+        for way in ways.iter() {            
+            let vertices = to_sweref(&way);
+            let mut first = true;
+            for v in vertices.into_iter() {
+                segments.push(
+                    match first {
+                        true => ocad::Segment::Move(v),
+                        false => ocad::Segment::Line(v),
+                    }
+                );
+                first = false;
+            }
+        }
+        post_box.send( ocad::Object {
+            object_type: ocad::ObjectType::Area,
+            symbol_number: fill_symbol_number,
+            segments: segments,
+        }).expect("Unable to post OSM object to OCAD.");
     }
 }
 
@@ -77,8 +146,9 @@ pub fn load_osm(southwest: &Wgs84, northeast: &Wgs84, file: Sender<ocad::Object>
     };
     let doc = osm::OSM::parse(reader).expect("Unable to parse OSM file.");
 
-    let sw = Sweref::from_wgs84(&soutwest);
+    let sw = Sweref::from_wgs84(&southwest);
     let ne = Sweref::from_wgs84(&northeast);
+    let bounding_box = geometry::LineSegment::segments_from_bounding_box(&sw, &ne);
 
     if verbose { println!("[{}] {} nodes, {} ways and {} relations", &module, doc.nodes.len(), doc.ways.len(), doc.relations.len()); }
 
@@ -108,7 +178,7 @@ pub fn load_osm(southwest: &Wgs84, northeast: &Wgs84, file: Sender<ocad::Object>
             })
             .collect();
         
-        if let Some(symbols) = t { post_way(ways, symbols, &mut file); }
+        if let Some(symbols) = t { post_way(ways, symbols, &file, &bounding_box); }
     }
 
     for (_, way) in doc.ways.iter() {
@@ -134,8 +204,9 @@ pub fn load_osm(southwest: &Wgs84, northeast: &Wgs84, file: Sender<ocad::Object>
                 _ => t,
             };
         }
+        let resolved = resolve_way(way, &doc);
 
-        if let Some(symbols) = t { post_way(vec![way], symbols, &mut file); }
+        if let Some(symbols) = t { post_way(vec![resolved], symbols, &file, &bounding_box); }
     }
     // Ok(r) => {
     //         

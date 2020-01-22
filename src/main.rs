@@ -9,12 +9,14 @@ use delaunator::{Point, triangulate};
 use std::f64;
 use std::f64::consts::PI;
 use colored::*;
+use std::sync::mpsc::{channel,Receiver,Sender};
 
 mod las;
 mod sweref_to_wgs84;
 mod wmm;
 mod osm;
 mod ocad;
+mod geometry;
 use sweref_to_wgs84::{Sweref,Wgs84};
 
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -108,8 +110,10 @@ r#"   _____             __    __    __              __
     // Set up OCAD file, with two receive channels. 
     // Start OSM curl.
     // 
+
+    let (ocad_tx, ocad_rx): (Sender<ocad::Object>, Receiver<ocad::Object>) = channel();
     
-    osm::load_osm(&southwest_corner, &northeast_corner, verbose);
+    osm::load_osm(&southwest_corner, &northeast_corner, ocad_tx.clone(), verbose);
     
 
     let records: Vec<las::PointDataRecord> = matches.free.iter().map(|x| las::PointDataRecord::load_from(Path::new(&x))).flatten().collect();

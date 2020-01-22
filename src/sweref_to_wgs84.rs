@@ -1,6 +1,6 @@
 use std::f64;
-use std::f64::consts::PI;
 
+#[derive(Clone)]
 pub struct Sweref {
     pub north: f64,
     pub east: f64
@@ -12,8 +12,8 @@ impl Sweref {
 
     pub fn from_wgs84(position: &Wgs84) -> Sweref {
 
-        let lat = position.latitude * PI/180.0;
-        let lon = position.longitude * PI/180.0;
+        let lat = position.latitude.to_radians();
+        let lon = position.longitude.to_radians();
 
         //
         // The compiler should be able to optimize away all these calculations.
@@ -29,7 +29,7 @@ impl Sweref {
         let C = 1.0/120.0 * (104.0*e2.powi(3) - 45.0*e2.powi(4));
         let D = 1.0/1260.0 * (1237.0*e2.powi(4));
         
-        let long_av = PI/180.0 * 15.0; // Mid meridian for SWEREF99.
+        let long_av = 15.0f64.to_radians(); // Mid meridian for SWEREF99.
         let k = 0.9996;  // Scale factor
         let f_n = 0.0;      // False northing
         let f_e = 500000.0; // False easting
@@ -78,7 +78,7 @@ impl Wgs84 {
     pub fn from_sweref(position: &Sweref) -> Wgs84 {
 
         let k: f64 = 0.9996;  // Scale factor
-        let cmeridian: f64 = PI * 15.0 / 180.0; // UTM 33.
+        let cmeridian: f64 = 15.0f64.to_radians(); // UTM 33.
         
         let x = (position.east - 500000.0) / k;
         let y = position.north / k;
@@ -163,8 +163,8 @@ impl Wgs84 {
         + x7frac * x7poly * x.powf(7.0);
         
         Wgs84 {
-            latitude: lat_rad * 180.0 / PI,
-            longitude: lon_rad * 180.0 / PI,
+            latitude: lat_rad.to_degrees(),
+            longitude: lon_rad.to_degrees(),
         }
     }
 }
