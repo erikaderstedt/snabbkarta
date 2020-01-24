@@ -5,6 +5,7 @@ use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 use std::slice;
 use std::convert::TryInto;
 use byteorder::{LittleEndian, ReadBytesExt};
+use std::path::PathBuf;
 
 static SOFT_ISOM_2017: &'static [u8] = include_bytes!("../20170608_symboluppsattning_isom_2017_ocad_12.ocd");
 
@@ -21,95 +22,118 @@ fn write_instance<T: Sized>(x: &T, writer: &mut dyn Write) -> std::io::Result<us
     writer.write(slice)
 }
 
+fn write_instances<T: Sized>(x: &Vec<T>, writer: &mut dyn Write) -> std::io::Result<usize> {
+    let slice = unsafe { slice::from_raw_parts(x.as_ptr() as *const u8, mem::size_of::<T>()*x.len()) };
+    writer.write(slice)
+}
+
 fn ftell(file: &mut dyn Seek) -> u32 {
     file.seek(SeekFrom::Current(0)).expect("Unable to obtain file position").try_into().expect("File size too large")
 }
 
 use super::sweref_to_wgs84::Sweref as Point;
 
-#[derive(Clone)]
+enum PointType {
+    Normal,
+    FirstBezier,
+    SecondBezier,
+    Corner,
+    HoleStart,
+}
+
+#[derive(Clone,Debug)]
 pub enum Segment {
     Move(Point),
     Bezier(Point,Point,Point),
     Line(Point),
 }
 
-impl Segment {
-    
-    fn ends(&self) -> &Point {
+#[derive(Debug,PartialEq)]
+pub enum ObjectType {
+    Point(f64),
+    Area,
+    Line(bool),
+    Rectangle,
+
+    Terminate,
+}
+
+impl ObjectType {
+    fn ocad_object_type(&self) -> u8 {
         match self {
-            Segment::Move(p) => &p,
-            Segment::Bezier(_,_,p) => &p,
-            Segment::Line(p) => &p,
+            Self::Point(_) => 1,
+            Self::Area => 2,
+            Self::Line(_) => 3,
+            Self::Rectangle => 4,
+            Self::Terminate => panic!("No valid object type for Terminate request.")
         }
     }
 }
 
-pub enum ObjectType {
-    Point,
-    Area,
-    Line,
-    Rectangle,
-}
-
+#[derive(Debug)]
 pub struct Object {
     pub object_type: ObjectType,
-    pub symbol_number: u32,
+    pub symbol_number: i32,
     pub segments: Vec<Segment>,
+}
+
+impl Object {
+
+    fn polys(&self, angle: f64, xoff: f64, yoff: f64) -> Vec<TDPoly> {
+
+        fn convert_to_upper_24_bits(p: f64) -> i32 {
+            if p < 0f64 {
+                (0x1000000i32 - ((-p) as i32)) << 8
+            } else {
+                (p as i32) << 8
+            }
+        }
+
+        let c = f64::cos(-angle.to_radians());
+        let s = f64::sin(-angle.to_radians());
+
+        let from_point = |p: &Point, t: &PointType| -> TDPoly {
+            // 1 bit = 0.01 mm.
+            // Map scale  1:15000 =>
+            // 1 bit 0.15 m.
+            let vx = (p.east - xoff) / 0.15f64;
+            let vy = (p.north - yoff) / 0.15f64;
+            let x = convert_to_upper_24_bits( vx * c + vy * s);
+            let y = convert_to_upper_24_bits(-vx * s + vy * c);
+            match t {
+                PointType::Normal       => TDPoly { x: x,       y: y },
+                PointType::FirstBezier  => TDPoly { x: x | 1,   y: y },
+                PointType::SecondBezier => TDPoly { x: x | 2,   y: y },
+                PointType::Corner       => TDPoly { x: x,       y: y | 1 },
+                PointType::HoleStart    => TDPoly { x: x,       y: y | 2 },
+            }
+        };
+
+        let mut polys = Vec::new();
+
+        let cornerize: bool = match self.object_type { ObjectType::Line(c) => c, _ => false };
+        for segment in self.segments.iter().enumerate() {
+                
+            match segment.1 {
+                Segment::Move(p) if segment.0 > 0 => { polys.push(from_point(p, &PointType::HoleStart)) },
+                Segment::Move(p) => { polys.push(from_point(p, &PointType::Normal)) },
+                Segment::Line(p) if cornerize => { polys.push(from_point(p, &PointType::Normal)) },
+                Segment::Line(p) => { polys.push(from_point(p, &PointType::Corner)) },
+                Segment::Bezier(p1,p2,p3) => {
+                    polys.push(from_point(p1, &PointType::FirstBezier));
+                    polys.push(from_point(p2, &PointType::SecondBezier));
+                    polys.push(from_point(p3, &PointType::Normal))
+                },
+            }    
+        }
+        polys            
+    }
 }
 
 struct Strings {
     s: Vec<u8>,
     record_type: i32,
 }
- 
-// impl Object {
-
-//     pub fn clip_to_bounds(&mut self, sw: &Point, ne: &Point) {
-//         if self.segments.len() == 0 { return }
-
-//         let is_outside = |p: &Point| p.east < sw.east || p.east > ne.east || p.north < sw.north || p.north > ne.north;
-//         let mut new_segments = Vec::new();
-//         let previous_was_outside: Option<bool> = None;
-//         let current_point: Option<Point> = None;
-
-//         for (i, segment) in self.segments.iter().enumerate() {
-//             let outside = is_outside(segment.ends());
-//             let mut first = true;
-//             match previous_was_outside {
-//                 Some(true) if outside => {
-//                     current_point = Some(segment.ends().clone());
-//                 },
-//                 Some(true) if !outside => {
-//                     // We wee outside, but are moving into the area. 
-//                     match segment {
-//                         Segment::Move(p) => { new_segments.push(segment); },
-//                         Segment::Line(p) => { // Move to edge, then line
-//                             // Use line intersection crate?
-//                             // Also "flo_curves" for fit_curve_cubic. och solve_curve_for_t.
-//                     }
-//                 },
-//                 Some(false) if !outside {
-
-//                 },
-//             }
-//                 true if previous_was_outside.is_none() => continue, // First segment, and outside
-//                 false if previous_was_outside.is_none() => 
-
-//             }
-//             if this != previous {
-
-//             } else 
-//         }
-//     }
-
-//     fn polys(&self, sw: &Point, ne: &Point) -> Vec<TDPoly> {
-
-//         let mut p = Vec::new();
-
-        
-//     }
-// }
 
 fn load_from_isom() -> (Vec<Vec<u8>>, Vec<Strings>) {
     let mut data = Cursor::new(SOFT_ISOM_2017);
@@ -120,18 +144,18 @@ fn load_from_isom() -> (Vec<Vec<u8>>, Vec<Strings>) {
 
     let mut next_symbol_index: u64 = header.symbolindex.into();
     while next_symbol_index != 0 {
-        data.seek(SeekFrom::Start(next_symbol_index)).unwrap();
+        data.seek(SeekFrom::Start(next_symbol_index)).expect("Unable to seek to start of symbol index.");
         let symbol_block: SymbolBlock = read_instance(&mut data);
 
         next_symbol_index = symbol_block.nextsymbolblock as u64;
         let indices = symbol_block.symbol_indices;
         for position in indices.iter().filter(|x| **x > 0) {
             let p: u64 = (*position).into();
-            data.seek(SeekFrom::Start(p)).unwrap(); 
+            data.seek(SeekFrom::Start(p)).expect("Unable to seek to start of symbol."); 
             // Read a single u32
             let sz: usize = data.read_u32::<LittleEndian>().expect("Unable to read symbol size.") as usize;
             let mut v = vec![0u8;sz];
-            data.seek(SeekFrom::Start(p)).unwrap(); 
+            data.seek(SeekFrom::Start(p)).expect("Unable to seek to start of symbol again."); 
             data.read_exact(&mut v).expect("Unable to read symbol.");
             symbols.push(v);
         }
@@ -147,9 +171,9 @@ fn load_from_isom() -> (Vec<Vec<u8>>, Vec<Strings>) {
         next_string_index = string_block.nextindexblock as u64;
         let indices = string_block.indices;
         for string_index in indices.iter().filter(|x| x.position > 0) {
-            let sz: usize = string_index.length.try_into().unwrap();
+            let sz: usize = string_index.length.try_into().expect("Unable to convert string index length to usize.");
             let mut buffer = vec![0u8;sz];
-            data.seek(SeekFrom::Start(string_index.position as u64)).unwrap();
+            data.seek(SeekFrom::Start(string_index.position as u64)).expect("Unable to seek to start of string.");
             data.read_exact(&mut buffer).expect("Unable to read string from OCAD file.");
             strings.push( Strings {
                 s: buffer.to_vec(),
@@ -161,7 +185,7 @@ fn load_from_isom() -> (Vec<Vec<u8>>, Vec<Strings>) {
     (symbols, strings.into_iter().filter(|x| match x.record_type { 9 | 10 => true, _ => false }).collect())
 }
 
-pub fn create(path: &str, southwest_corner: Point, northeast_corner: Point, angle: f64, queue: Receiver<Object>, finalize: Receiver<bool>) {
+pub fn create(path: &PathBuf, southwest_corner: &Point, northeast_corner: &Point, angle: f64, queue: &Receiver<Object>) {
     let (mut soft_symbols, mut soft_strings) = load_from_isom();
 
     let x0 = (northeast_corner.east + southwest_corner.east)*0.5;
@@ -186,8 +210,8 @@ pub fn create(path: &str, southwest_corner: Point, northeast_corner: Point, angl
         _mrstartblockposition: 0,
     };
 
-    let mut file = fs::File::create(path).expect("Unable to create output file.");
-    write_instance(&header, &mut file).expect("Unable to write OCAD header");
+    let mut file = fs::File::create(path.to_str().expect("Unable to convert output path to str.")).expect("Unable to create output file.");
+    write_instance(&header, &mut file).expect("Unable to write OCAD header.");
     header.symbolindex = ftell(&mut file);
     
     while soft_symbols.len() > 0 {
@@ -203,7 +227,7 @@ pub fn create(path: &str, southwest_corner: Point, northeast_corner: Point, angl
         if soft_symbols.len() > 0 {
             symbol_index.nextsymbolblock = ftell(&mut file);
         }
-        file.seek(SeekFrom::Start(index.into())).unwrap();
+        file.seek(SeekFrom::Start(index.into())).expect("Unable to seek to start of symbol index.");
         write_instance(&symbol_index, &mut file).expect("Could not write final symbol index to OCAD file.");
         file.seek(SeekFrom::End(0)).expect("Unable to seek back to end of file.");
     }
@@ -223,7 +247,7 @@ pub fn create(path: &str, southwest_corner: Point, northeast_corner: Point, angl
         if soft_strings.len() > 0 {
             string_index.nextindexblock = ftell(&mut file);            
         }
-        file.seek(SeekFrom::Start(index.into())).unwrap();
+        file.seek(SeekFrom::Start(index.into())).expect("Unable to seek to start of string index.");
         write_instance(&string_index, &mut file).expect("Could not write final string index to OCAD file.");
         file.seek(SeekFrom::End(0)).expect("Unable to seek back to end of file.");
     }
@@ -231,10 +255,12 @@ pub fn create(path: &str, southwest_corner: Point, northeast_corner: Point, angl
     header.objectindex = ftell(&mut file);
 
     // BEGIN object index
-    fn begin_object_index(file: &mut dyn Seek) -> ObjectIndexBlock { 
-        ObjectIndexBlock { nextindexblock: 0, indices: [ObjectIndex { 
+    fn begin_object_index(file: &mut fs::File) -> ObjectIndexBlock { 
+        let o = ObjectIndexBlock { nextindexblock: 0, indices: [ObjectIndex { 
             rc: LRect { lower_left: TDPoly { x: 0, y: 0 }, upper_right: TDPoly { x: 0, y: 0 } },
-            position: 0, length: 0, symbol: 0, object_type: 0, encrypted_mose: 0, status: 0, viewtype: 0, color: 0, reserved1: 0, imported_layer: 0, reserved2: 0 }; 256] }
+            position: 0, length: 0, symbol: 0, object_type: 0, encrypted_mose: 0, status: 0, viewtype: 0, color: 0, reserved1: 0, imported_layer: 0, reserved2: 0 }; 256] };
+        write_instance(&o, file).expect("Unable to write object index instance.");
+        o
     }
 
     fn end_object_index(position: u32, object_index: &mut ObjectIndexBlock, file: &mut fs::File) -> u32 {
@@ -246,21 +272,67 @@ pub fn create(path: &str, southwest_corner: Point, northeast_corner: Point, angl
     
     let mut start_pos = header.objectindex;
     let mut object_index = begin_object_index(&mut file);
+    let mut current_index = 0;
 
-    while finalize.try_recv().unwrap_or(false) {
-        let mut current_index = 0;
-        match queue.recv_timeout(std::time::Duration::from_millis(100)) {
-            Ok(object) => {
+    loop {
+        let object = queue.recv().expect("Unable to receive message on OCAD thread.");
+        if object.object_type == ObjectType::Terminate { break; }
 
-                current_index = current_index + 1;
-                if current_index == 256 {
-                    start_pos = end_object_index(start_pos, &mut object_index, &mut file);
-                    object_index = begin_object_index(&mut file);
-                    current_index = 0
-                }
-            },
-            _ => {},
+        let p = object.polys(angle, x0, y0);
+
+        let element = Element {
+            symbol_number: object.symbol_number,
+            object_type: object.object_type.ocad_object_type(),
+            angle: match object.object_type { ObjectType::Point(a) => (a*10f64) as i16, _ => 0i16 },
+            _color: 0u32,
+            _line_width: 0u16,
+            _diam_flags: 0u16,
+            _server_object_id: 0u32,
+            _height: 0i32,
+            _creation_date: 0f64,
+            _multirepresentationid: 0u32,
+            _modification_date: 0f64,
+            n_coordinates: p.len() as u32,
+            _n_text: 0i16, _n_object_string: 0i16, _n_database_string: 0i16,
+            _object_string_type: 0u8,
+            _reserved0: 0u8, _reserved1: 0u8,
         };
+
+        let position = ftell(&mut file) as u32;
+
+        write_instance(&element, &mut file).expect("Unable to write OCAD element.");
+        write_instances(&p, &mut file).expect("Unable to write TDPoly vector.");
+
+        // Create Element, and fill out object index
+        object_index.indices[current_index] = ObjectIndex {
+            rc: LRect { 
+                lower_left: TDPoly { 
+                    x: (p.iter().map(|j| j.x).min().unwrap() >> 8) << 8,
+                    y: (p.iter().map(|j| j.y).min().unwrap() >> 8) << 8,
+                },
+                upper_right: TDPoly {
+                    x: (p.iter().map(|j| j.x).max().unwrap() >> 8) << 8,
+                    y: (p.iter().map(|j| j.y).max().unwrap() >> 8) << 8,
+                },
+            },
+            position: position,
+            length: (mem::size_of::<ObjectIndex>() + (mem::size_of::<TDPoly>()) * p.len()) as u32,
+            symbol: element.symbol_number,
+            object_type: element.object_type,
+            encrypted_mose: 0u8,
+            status: 1u8,
+            viewtype: 0u8,
+            color: 0u16,
+            reserved1: 0u16, reserved2: 0u16, imported_layer: 0u16,
+        };
+
+        if current_index == 255 {
+            start_pos = end_object_index(start_pos, &mut object_index, &mut file);
+            object_index = begin_object_index(&mut file);
+            current_index = 0
+        } else {
+            current_index = current_index+1;
+        }
     }
 
     end_object_index(start_pos, &mut object_index, &mut file);
@@ -281,7 +353,7 @@ struct LRect {
 }
 
 #[repr(C,packed)]
-#[derive(Debug)]
+#[derive(Debug,Copy,Clone)]
 struct RawFileHeader {
     _ocadmark: u16,
     _filetype: u8,
@@ -346,20 +418,20 @@ struct ObjectIndexBlock {
 struct Element {
     symbol_number: i32,
     object_type: u8,
-    reserved0: u8,
+    _reserved0: u8,
     angle: i16,
-    color: u32,
-    line_width: u16,
-    diam_flags: u16,
-    server_object_id: u32,
-    height: i32,
-    creation_date: f64,
-    multirepresentationid: u32,
-    modification_date: f64,
+    _color: u32,
+    _line_width: u16,
+    _diam_flags: u16,
+    _server_object_id: u32,
+    _height: i32,
+    _creation_date: f64,
+    _multirepresentationid: u32,
+    _modification_date: f64,
     n_coordinates: u32,
-    n_text: i16,
-    n_object_string: i16,
-    n_database_string: i16,
-    object_string_type: u8,
-    reserved1: u8,
+    _n_text: i16,
+    _n_object_string: i16,
+    _n_database_string: i16,
+    _object_string_type: u8,
+    _reserved1: u8,
 }

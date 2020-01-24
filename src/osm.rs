@@ -23,7 +23,12 @@ fn to_sweref(nodes: &Vec<&Node>) -> Vec<Sweref> {
     nodes.iter().map(|node| Sweref::from_wgs84( &Wgs84 { latitude: node.lat, longitude: node.lon } )).collect()
 }
 
-fn post_way(ways: Vec<Vec<&Node>>, symbols: (Option<u32>, Option<u32>, bool), post_box: &Sender<ocad::Object>, bounding_box: &Vec<geometry::LineSegment>) {
+enum GraphSymbol {
+    Stroke(i32, bool),
+    Fill(i32),
+}
+
+fn post_way(ways: Vec<Vec<&Node>>, symbols: &Vec<GraphSymbol>, post_box: &Sender<ocad::Object>, bounding_box: &Vec<geometry::LineSegment>) {
     let sw = &bounding_box[0].p0;
     let ne = &bounding_box[2].p0;
     let outside = |vertex: &Sweref| vertex.east < sw.east || vertex.east > ne.east || vertex.north > ne.north || vertex.north < sw.north;
@@ -32,86 +37,72 @@ fn post_way(ways: Vec<Vec<&Node>>, symbols: (Option<u32>, Option<u32>, bool), po
         .next()
         .expect("No intersection with bounding box edge") };
 
-    if let Some(stroke_symbol_number) = symbols.0 {
+    for symbol in symbols.iter() {
+        let mut segments = Vec::new();
+        let finish_symbol = |segments: Vec<ocad::Segment>| -> Vec<ocad::Segment> {
+            if segments.len() > 0 {
+                post_box.send(
+                    match symbol {
+                        GraphSymbol::Stroke(symbol_number, cornerize) => ocad::Object { 
+                            object_type: ocad::ObjectType::Line(*cornerize), 
+                            symbol_number: *symbol_number, segments: segments,
+                        },
+                        GraphSymbol:: Fill(symbol_number) => ocad::Object {
+                            object_type: ocad::ObjectType::Area,
+                            symbol_number: *symbol_number,
+                            segments: segments,
+                        },
+                    }
+                ).expect("Unable to post OSM object to OCAD.");
+            }
+            vec![]
+        };
+
         for way in ways.iter() {            
             let vertices = to_sweref(&way);
-            if vertices.len() == 0 { continue }
 
-            // if first vertex is outside, skip until *next* is inside. 
-            let first_inside = match vertices.iter().enumerate().skip_while(|x| outside(x.1)).next() {
-                Some(x) => x.0,
-                None => continue, // No points are inside. We can skip the whole way.
-            };
-            let mut current_point = match first_inside {
-                0 => vertices[0].clone(),
-                i => {
-                    let p0 = vertices[i-1].clone();
-                    let p1 = vertices[i].clone();
-                    let segment = geometry::LineSegment::create(&p0, &p1);
-                    intersect(&segment)
-                }
-            };
+            let mut current_point: Option<Sweref> = None;
+            let mut is_outside = true;
 
-            let mut segments = Vec::new();
-            segments.push(ocad::Segment::Move(current_point.clone()));
-            let mut is_outside = false;
-
-            for vertex in vertices.iter().skip(first_inside) {
+            for vertex in vertices.iter() {
                 let this_is_outside = outside(vertex);
                 match (is_outside, this_is_outside) {
                     (false, true) => { // Going outside
-                        let segment = geometry::LineSegment::create(&current_point, vertex);
+                        let segment = geometry::LineSegment::create(&current_point.unwrap(), vertex);
                         segments.push(ocad::Segment::Line(intersect(&segment)));
+
+                        segments = finish_symbol(segments);
                     },
                     (true, false) => { // Going inside
-                        let segment = geometry::LineSegment::create(&current_point, vertex);
-                        segments.push(ocad::Segment::Move(intersect(&segment)));
-                        segments.push(ocad::Segment::Line(vertex.clone()));
+                        if let Some(p) = current_point {
+                            let segment = geometry::LineSegment::create(&p, vertex);
+                            let intersect_point = intersect(&segment);
+                            segments.push(match symbol {
+                                GraphSymbol::Stroke(_,_) => ocad::Segment::Move(intersect_point),
+                                GraphSymbol::Fill(_) => ocad::Segment::Line(intersect_point),
+                            });
+                            segments.push(ocad::Segment::Line(vertex.clone()));
+                        } else {
+                            segments.push(ocad::Segment::Move(vertex.clone()));
+                        }
                     },
                     (false,false) => { // Only inside
                         segments.push(ocad::Segment::Line(vertex.clone()));
                     },
                     (true,true) => { continue }, // Only outside
                 }
-                current_point = vertex.clone();
+                current_point = Some(vertex.clone());
                 is_outside = this_is_outside;
             }
-
-            post_box.send( ocad::Object {
-                object_type: ocad::ObjectType::Area,
-                symbol_number: stroke_symbol_number,
-                segments: segments,
-            }).expect("Unable to post OSM object to OCAD.");
+            segments = finish_symbol(segments);
         }
+        segments = finish_symbol(segments);
+
     }
 
-    if let Some(fill_symbol_number) = symbols.1 {
-        // TODO: cut these too!
-        
-        // First way is the main, subsequent ways are holes.
-        let mut segments = Vec::new();
-        for way in ways.iter() {            
-            let vertices = to_sweref(&way);
-            let mut first = true;
-            for v in vertices.into_iter() {
-                segments.push(
-                    match first {
-                        true => ocad::Segment::Move(v),
-                        false => ocad::Segment::Line(v),
-                    }
-                );
-                first = false;
-            }
-        }
-        post_box.send( ocad::Object {
-            object_type: ocad::ObjectType::Area,
-            symbol_number: fill_symbol_number,
-            segments: segments,
-        }).expect("Unable to post OSM object to OCAD.");
-    }
 }
 
-pub fn load_osm(southwest: &Wgs84, northeast: &Wgs84, file: Sender<ocad::Object>, verbose: bool) {
+pub fn load_osm(southwest: &Wgs84, northeast: &Wgs84, file: &Sender<ocad::Object>, verbose: bool) {
     let module = "OSM".yellow();
     let cache_path = format!("{:.6}_{:.6}_{:.6}_{:.6}.osm-cache.xml", 
             southwest.latitude, southwest.longitude,
@@ -154,14 +145,14 @@ pub fn load_osm(southwest: &Wgs84, northeast: &Wgs84, file: Sender<ocad::Object>
 
     for (_, relation) in doc.relations.iter() {
 
-        let mut t: Option<(Option<u32>, Option<u32>, bool)> = None;
+        let mut t = Vec::new();
         for tag in relation.tags.iter() {
             t = match (&tag.key[..], &tag.val[..]) {
-                ("wires","single") => Some((Some(510000), None, true)),
-                ("route","power") if t == None => Some((Some(511000), None, true)),                
-                ("wetland","bog") => Some((Some(415000),Some(307000),false)),
-                ("wetland","swamp") => Some((None, Some(308000), false)),
-                ("landuse","meadow") => Some((Some(415000),Some(412000), false)),
+                ("wires","single") => vec![GraphSymbol::Stroke(510000,true)],
+                ("route","power") if t.len() == 0 => vec![GraphSymbol::Stroke(511000,true)],              
+                ("wetland","bog") =>  vec![GraphSymbol::Stroke(415000,false), GraphSymbol::Fill(307000)],
+                ("wetland","swamp") => vec![GraphSymbol::Fill(308000)],
+                ("landuse","meadow") => vec![GraphSymbol::Stroke(415000,false), GraphSymbol::Fill(412000)],
                 _ => t,
             };
         }
@@ -178,37 +169,33 @@ pub fn load_osm(southwest: &Wgs84, northeast: &Wgs84, file: Sender<ocad::Object>
             })
             .collect();
         
-        if let Some(symbols) = t { post_way(ways, symbols, &file, &bounding_box); }
+        post_way(ways, &t, file, &bounding_box);
     }
 
     for (_, way) in doc.ways.iter() {
-        let mut t: Option<(Option<u32>, Option<u32>, bool)> = None;
+        let mut t = Vec::new();
         for tag in way.tags.iter() {
             t = match (&tag.key[..], &tag.val[..]) {
-                ("landuse","residential") => Some((Some(520000), Some(521001), false)),
-                ("landuse","meadow") => Some((Some(415000), Some(412000), false)),
-                ("highway","path") => Some((Some(506000), None, false)),
-                ("highway","track") => Some((Some(505000), None, false)),
-                ("highway","tertiary") => Some((Some(502000), None, false)),
-                ("highway","service") => Some((Some(504000), None, false)),
-                ("highway","secondary") =>Some((Some(502001), None, false)),
-                ("highway","primary") => Some((Some(502002), None, false)),
-                ("highway", _) => Some((Some(503000), None, false)),
-                ("building",_) => Some((None, Some(521000), false)),
-                ("water","lake") => None,
-                ("wetland","bog") => Some((Some(415000), Some(307000), false)),
-                ("wetland",_) => Some((Some(415000), Some(308000), false)),
-                ("power","line") => Some((Some(510000), None, true)),
-                ("waterway","stream") => Some((Some(305000), None, false)),
-                ("waterway","ditch") => Some((Some(306000), None, false)),
+                ("landuse","residential") => vec![GraphSymbol::Stroke(520000,false), GraphSymbol::Fill(521001)],
+                ("landuse","meadow") => vec![GraphSymbol::Stroke(415000,false), GraphSymbol::Fill(412000)],
+                ("highway","path") => vec![GraphSymbol::Stroke(506000,false)],
+                ("highway","track") => vec![GraphSymbol::Stroke(505000,false)],
+                ("highway","tertiary") => vec![GraphSymbol::Stroke(502000,false)],
+                ("highway","service") => vec![GraphSymbol::Stroke(504000,false)],
+                ("highway","secondary") => vec![GraphSymbol::Stroke(502001,false)],
+                ("highway","primary") => vec![GraphSymbol::Stroke(502002,false)],
+                ("highway", _) => vec![GraphSymbol::Stroke(503000,false)],
+                ("building",_) => vec![GraphSymbol::Fill(521000)],
+                ("wetland","bog") => vec![GraphSymbol::Stroke(415000,false), GraphSymbol::Fill(307000)],
+                ("wetland",_) => vec![GraphSymbol::Stroke(415000,false), GraphSymbol::Fill(308000)],
+                ("power","line") => vec![GraphSymbol::Stroke(510000,true)],
+                ("waterway","stream") => vec![GraphSymbol::Stroke(305000,false)],
+                ("waterway","ditch") => vec![GraphSymbol::Stroke(306000,false)],
                 _ => t,
             };
         }
         let resolved = resolve_way(way, &doc);
 
-        if let Some(symbols) = t { post_way(vec![resolved], symbols, &file, &bounding_box); }
+        post_way(vec![resolved], &t, file, &bounding_box);
     }
-    // Ok(r) => {
-    //         
-    // }
 }

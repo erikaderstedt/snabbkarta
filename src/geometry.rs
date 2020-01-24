@@ -1,5 +1,4 @@
 use super::sweref_to_wgs84::Sweref;
-use std::cmp::Ordering;
 
 pub struct LineSegment {
     pub p0: Sweref,
@@ -42,15 +41,11 @@ impl LineSegment {
         // if n was zero, 
         if ta.is_infinite() { return None };
 
-        match ta >= 0f64 && ta <= 1f64 && tb >= 0f64 && tb <= 1f64 {
+        let intersects = 0.0f64..1.0f64;
+        match intersects.contains(&ta) && intersects.contains(&tb) {
             true => Some(Sweref { north: y1 + ta * (y2 - y1), east: x1 + ta * (x2 - x1) }),
             false => None,
         }
-        // match (ta.partial_cmp(&0f64), ta.partial_cmp(&1f64), tb.partial_cmp(&0f64), tb.partial_cmp(&1f64)) {
-        //     (Some(Ordering::Greater), Some(Ordering::Less), Some(Ordering::Greater), Some(Ordering::Less)) => 
-        //         Some(Sweref { north: y1 + ta * (y2 - y1), east: x1 + ta * (x2 - x1) }),
-        //     _ => None,
-        // }
     }
 }
 

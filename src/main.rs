@@ -9,6 +9,7 @@ use delaunator::{Point, triangulate};
 use std::f64;
 use std::f64::consts::PI;
 use colored::*;
+use std::thread;
 use std::sync::mpsc::{channel,Receiver,Sender};
 
 mod las;
@@ -57,7 +58,7 @@ r#"   _____             __    __    __              __
 /____/_/ /_/\__,_/_.___/_.___/_/|_|\__,_/_/   \__/\__,_/  
                                                           "# };
 
-    println!("{} {}\n(c) Autopercept 2018-2020.\nContact: erik.aderstedt@autopercept.com\n\n", appname, VERSION);
+    println!("{} {}\n(c) Autopercept 2018-2020.\nContact: erik.aderstedt@autopercept.com\n", appname, VERSION);
 
     // Input in matches.free
     let f = matches.free[0].clone();
@@ -72,8 +73,7 @@ r#"   _____             __    __    __              __
     let max_z = headers.iter().map(|x| x.max_z).fold(0./0., f64::max);
     let min_z = headers.iter().map(|x| x.min_z).fold(0./0., f64::min);
 
-    println!("Input files: {} {} {} {} {}", total_number_of_records, max_x, min_x, max_y, min_y);
-    println!("Output path: {:?}", output_path);
+    if verbose { println!("[{}] Writing to {:?}", &module, output_path); }
 
     let x_scale_factor = headers[0].x_scale_factor;
     let x_offset = headers[0].x_offset;
@@ -112,21 +112,35 @@ r#"   _____             __    __    __              __
     // 
 
     let (ocad_tx, ocad_rx): (Sender<ocad::Object>, Receiver<ocad::Object>) = channel();
-    
-    osm::load_osm(&southwest_corner, &northeast_corner, ocad_tx.clone(), verbose);
-    
+    let ocad_thread = thread::spawn(move || {
+        ocad::create(&output_path, 
+            &Sweref { north: min_y, east: min_x, },
+            &Sweref { north: max_y, east: max_x, }, 
+            magnetic_declination + meridian_convergence, 
+            &ocad_rx);
+    });
+
+    let tx = ocad_tx.clone();
+    let osm_thread = thread::spawn(move || {
+        osm::load_osm(&southwest_corner, &northeast_corner, &tx, verbose);
+    });
 
     let records: Vec<las::PointDataRecord> = matches.free.iter().map(|x| las::PointDataRecord::load_from(Path::new(&x))).flatten().collect();
-    println!("Records: {:?}", records.len());
-
     let ground_points: Vec<Point> = records.iter()
         .filter(|record| record.classification == 2)
         .map(|record| Point { x: ((record.x as f64) * x_scale_factor + x_offset) - min_x,
                         y: ((record.y as f64) * y_scale_factor + y_offset) - min_y })
         .collect();
 
-    println!("Points: {:?}", ground_points.len());
     let result = triangulate(&ground_points).expect("No triangulation exists.");
-    println!("{:?}", result.len());
+    println!("[{}] DTM triangulation complete, {:?} triangles", &module, result.len());
+
+    osm_thread.join().expect("Unable to finish OpenStreetMap thread");
+    ocad_tx.send(ocad::Object {  
+        object_type: ocad::ObjectType::Terminate,
+        symbol_number: 0i32,
+        segments: Vec::new(),
+    }).expect("Unable to tell OCAD thread to finish");
+    ocad_thread.join().expect("Unable to finish OCAD thread");
 
 }

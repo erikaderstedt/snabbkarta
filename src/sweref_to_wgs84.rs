@@ -1,6 +1,6 @@
 use std::f64;
 
-#[derive(Clone)]
+#[derive(Clone,Debug)]
 pub struct Sweref {
     pub north: f64,
     pub east: f64
@@ -64,6 +64,7 @@ impl Sweref {
     }
 }
 
+#[derive(Debug)]
 pub struct Wgs84 {
     pub latitude: f64,
     pub longitude: f64,

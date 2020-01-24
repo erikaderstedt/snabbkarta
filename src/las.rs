@@ -66,7 +66,6 @@ impl LAS_File_Header {
             );
             file.read_exact(hdr_slice).unwrap();
         }
-        unsafe { println!("Read structure: {}", hdr.header_size); }
         return hdr;
     }
 
