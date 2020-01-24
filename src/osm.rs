@@ -28,6 +28,28 @@ enum GraphSymbol {
     Fill(i32),
 }
 
+impl ocad::Object {
+
+    fn empty_object(gsymbol: &GraphSymbol) -> ocad::Object {
+        match gsymbol {
+            GraphSymbol::Stroke(symbol_number, cornerize) => ocad::Object { 
+                object_type: ocad::ObjectType::Line(*cornerize), 
+                symbol_number: *symbol_number, segments: vec![],
+            },
+            GraphSymbol:: Fill(symbol_number) => ocad::Object {
+                object_type: ocad::ObjectType::Area,
+                symbol_number: *symbol_number,
+                segments: vec![],
+            },
+        }
+    }
+
+    fn push(&mut self, s: ocad::Segment) {
+        self.segments.push(s)
+    }
+
+}
+
 fn post_way(ways: Vec<Vec<&Node>>, symbols: &Vec<GraphSymbol>, post_box: &Sender<ocad::Object>, bounding_box: &Vec<geometry::LineSegment>) {
     let sw = &bounding_box[0].p0;
     let ne = &bounding_box[2].p0;
@@ -38,25 +60,7 @@ fn post_way(ways: Vec<Vec<&Node>>, symbols: &Vec<GraphSymbol>, post_box: &Sender
         .expect("No intersection with bounding box edge") };
 
     for symbol in symbols.iter() {
-        let mut segments = Vec::new();
-        let finish_symbol = |segments: Vec<ocad::Segment>| -> Vec<ocad::Segment> {
-            if segments.len() > 0 {
-                post_box.send(
-                    match symbol {
-                        GraphSymbol::Stroke(symbol_number, cornerize) => ocad::Object { 
-                            object_type: ocad::ObjectType::Line(*cornerize), 
-                            symbol_number: *symbol_number, segments: segments,
-                        },
-                        GraphSymbol:: Fill(symbol_number) => ocad::Object {
-                            object_type: ocad::ObjectType::Area,
-                            symbol_number: *symbol_number,
-                            segments: segments,
-                        },
-                    }
-                ).expect("Unable to post OSM object to OCAD.");
-            }
-            vec![]
-        };
+        let mut object = ocad::Object::empty_object(symbol); 
 
         for way in ways.iter() {            
             let vertices = to_sweref(&way);
@@ -69,35 +73,43 @@ fn post_way(ways: Vec<Vec<&Node>>, symbols: &Vec<GraphSymbol>, post_box: &Sender
                 match (is_outside, this_is_outside) {
                     (false, true) => { // Going outside
                         let segment = geometry::LineSegment::create(&current_point.unwrap(), vertex);
-                        segments.push(ocad::Segment::Line(intersect(&segment)));
+                        object.push(ocad::Segment::Line(intersect(&segment)));
 
-                        segments = finish_symbol(segments);
+                        match object.object_type {
+                            ocad::ObjectType::Line(_) => { post_box.send(object).expect("Unable to send OSM object to OCAD."); object = ocad::Object::empty_object(symbol);},
+                            _ => {}
+                        }
                     },
                     (true, false) => { // Going inside
                         if let Some(p) = current_point {
                             let segment = geometry::LineSegment::create(&p, vertex);
                             let intersect_point = intersect(&segment);
-                            segments.push(match symbol {
+                            object.push(match symbol {
                                 GraphSymbol::Stroke(_,_) => ocad::Segment::Move(intersect_point),
                                 GraphSymbol::Fill(_) => ocad::Segment::Line(intersect_point),
                             });
-                            segments.push(ocad::Segment::Line(vertex.clone()));
+                            object.push(ocad::Segment::Line(vertex.clone()));
                         } else {
-                            segments.push(ocad::Segment::Move(vertex.clone()));
+                            object.push(ocad::Segment::Move(vertex.clone()));
                         }
                     },
                     (false,false) => { // Only inside
-                        segments.push(ocad::Segment::Line(vertex.clone()));
+                        object.push(ocad::Segment::Line(vertex.clone()));
                     },
                     (true,true) => { continue }, // Only outside
                 }
                 current_point = Some(vertex.clone());
                 is_outside = this_is_outside;
             }
-            segments = finish_symbol(segments);
+            match object.object_type {
+                ocad::ObjectType::Line(_) if object.segments.len() > 0 => { post_box.send(object).expect("Unable to send OSM object to OCAD."); object = ocad::Object::empty_object(symbol);},
+                _ => {}
+            }
         }
-        segments = finish_symbol(segments);
-
+        match object.object_type {
+            ocad::ObjectType::Area if object.segments.len() > 0 => { post_box.send(object).expect("Unable to send OSM object to OCAD."); },
+            _ => {}
+        }
     }
 
 }
