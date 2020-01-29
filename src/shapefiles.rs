@@ -7,6 +7,7 @@ use std::path::Path;
 use std::sync::mpsc::Sender;
 use super::sweref_to_wgs84::Sweref;
 use super::geometry;
+use colored::*;
 
 // https://www.lantmateriet.se/globalassets/kartor-och-geografisk-information/kartor/fastshmi.pdf
 
@@ -84,7 +85,7 @@ impl Iterator for Shapefile {
         
         let record_header: ShapefileRecordHeader = match read_instance(&mut self.shp) {
             Ok(h) => h,
-            Err(e) => { return None },
+            Err(_) => { return None },
         };
 
         let poly: ShapefilePoly = read_instance(&mut self.shp).expect("Unable to load polygon header in shapefile.");
@@ -125,6 +126,8 @@ enum ShapeType {
 pub fn load_shapefiles(bounding_box: &geometry::Rectangle, 
     folder: &Path,
     file: &Sender<ocad::Object>, verbose: bool) {
+        
+    let module = "SHP".yellow();
 
     let input_files = fs::read_dir(folder)
         .expect("Unable to open shapefile folder!")
@@ -136,6 +139,8 @@ pub fn load_shapefiles(bounding_box: &geometry::Rectangle,
         }
     });
 
+
+    let mut records = 0;
     for (shp, dbf) in input_files {
         let p = &dbf;
         let mut reader = dbase::Reader::from_path(p).expect("Unable to open dBase-III file!");
@@ -153,6 +158,8 @@ pub fn load_shapefiles(bounding_box: &geometry::Rectangle,
                     _ => panic!("Invalid field value for DETALJTYP field."),
                 };
 
+                records = records + 1;
+
                 // let 
 
                 // // For polygons, several parts make up a block. Each clockwise part makes up the start of a polygon. So, only begin a new ocad object when 
@@ -169,5 +176,9 @@ pub fn load_shapefiles(bounding_box: &geometry::Rectangle,
     
             }
         } 
+    }
+
+    if verbose {
+        println!("[{}] Loaded {} records from shapefiles.", &module, records);
     }
 }

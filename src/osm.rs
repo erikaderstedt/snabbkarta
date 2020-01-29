@@ -1,5 +1,5 @@
 extern crate osm_xml as osm;
-extern crate ureq;
+extern crate reqwest;
 extern crate colored;
 
 use std::sync::mpsc::Sender;
@@ -40,23 +40,25 @@ pub fn load_osm(southwest: &Wgs84, northeast: &Wgs84, file: &Sender<ocad::Object
             r
         },
         Err(e) => {
-            println!("{}", e);
             let query = format!("node({},{},{},{})->.x;.x;way(bn);rel[wetland=swamp](bw)->.swamps;rel[wetland=bog](bw)->.bogs;rel[route=power](bw)->.pwr;rel[landuse=meadow](bw)->.meadows;.x;way[highway](bn)->.highways;way[building](bn)->.buildings;way[landuse=residential](bn)->.plots;way[landuse=meadow](bn)->.smallmeadows;way[wetland=swamp](bn)->.smallswamps;way[wetland=bog](bn)->.smallbogs;way[power=line](bn)->.smallpwr;way[waterway=ditch](bn)->.ditches;way[waterway=stream](bn)->.streams;( (  .swamps;.streams; .ditches;  .bogs;.pwr;.highways;.plots;.meadows;  .buildings;.smallswamps;  .smallmeadows;.smallbogs;.smallpwr;  ); >; );out;",
             southwest.latitude, southwest.longitude,
             northeast.latitude, northeast.longitude);
 
-            let resp = ureq::post("https://lz4.overpass-api.de/api/interpreter")
-                    .send_string(&query);
-            
-            if resp.ok() {
-                let mut r = resp.into_reader();
+            let client  = reqwest::blocking::Client::new();
+            let mut res = match client.post("https://lz4.overpass-api.de/api/interpreter")
+                    .body(query)
+                    .send() {
+                Ok(r) => r,
+                Err(e) => {
+                    println!("[{}] OSM fetch error: {}", &module, e);
+                    return
+                },
+            };
+            { 
                 let mut f = File::create(&cache_path).expect("Unable to create OSM cache path.");
-                io::copy(&mut r, &mut f).expect("Unable to write to OSM cache.");
-                File::open(&cache_path).expect("Unable to open the cache I just wrote!")
-            } else {
-                println!("[{}] OSM fetch error: {}", &module, resp.status_text());
-                return;
-            }
+                io::copy(&mut res, &mut f).expect("Unable to write to OSM cache.");
+            };
+            File::open(&cache_path).expect("Unable to open the cache I just wrote!")
         }
     };
     let doc = osm::OSM::parse(reader).expect("Unable to parse OSM file.");
@@ -118,5 +120,8 @@ pub fn load_osm(southwest: &Wgs84, northeast: &Wgs84, file: &Sender<ocad::Object
         let resolved = resolve_way(way, &doc);
 
         post_way(vec![resolved], &t, file, &bounding_box);
+    }
+    if verbose {
+        println!("[{}] OSM complete.", &module);
     }
 }

@@ -14,11 +14,10 @@ pub fn read_instance<T: Sized>(reader: &mut dyn Read) -> std::io::Result<T> {
 pub fn read_instances<T: Sized>(reader: &mut dyn Read, count: usize) -> std::io::Result<Vec<T>> {
     let mut v: Vec<T> = Vec::with_capacity(count);
     let sz = mem::size_of::<T>();
-    let slice = unsafe { 
+    unsafe { 
         let s = slice::from_raw_parts_mut(v.as_mut_ptr() as *mut u8, sz * count);
         reader.read_exact(s)?;
-        v.set_len(count);    
-        s
+        v.set_len(count);  
     };    
     Ok(v)
 }

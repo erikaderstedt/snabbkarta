@@ -14,4 +14,4 @@ colored = "1.9.2"
 osm-xml = "0.6.2"
 byteorder = "1.3.2"
 dbase = "0.1.0"
-ureq = "0.11.3"
+reqwest = { version = "0.10.1", features = ["blocking"] }

@@ -102,8 +102,8 @@ r#"   _____             __    __    __              __
         &Wgs84 { latitude: middle_of_map.latitude - 0.003, longitude: middle_of_map.longitude});
     let meridian_convergence: f64 = 90.0f64 - f64::atan2(top_of_map.north-bottom_of_map.north, top_of_map.east - bottom_of_map.east)*180f64/PI;
     let magnetic_declination: f64 = wmm::get_todays_magnetic_declination(&middle_of_map, height_over_sea_level);
-    let northeast_corner = Wgs84::from_sweref(&bounding_box.southwest);
-    let southwest_corner = Wgs84::from_sweref(&bounding_box.northeast);
+    let northeast_corner = Wgs84::from_sweref(&bounding_box.northeast);
+    let southwest_corner = Wgs84::from_sweref(&bounding_box.southwest);
 
     if verbose {
         println!("[{}] Average height over sea level: {:.0} m", &module, height_over_sea_level);
@@ -154,17 +154,11 @@ r#"   _____             __    __    __              __
         z: ((record.y as f64) * z_scale_factor + z_offset) - min_z,
     };
 
-
-
     let result = triangulate(&ground_points).expect("No triangulation exists.");
     println!("[{}] DTM triangulation complete, {:?} triangles", &module, result.len());
 
     preexisting_map_thread.join().expect("Unable to finish pre-existing map thread");
-    ocad_tx.send(ocad::Object {  
-        object_type: ocad::ObjectType::Terminate,
-        symbol_number: 0i32,
-        segments: Vec::new(),
-    }).expect("Unable to tell OCAD thread to finish");
+    ocad_tx.send(ocad::Object::termination()).expect("Unable to tell OCAD thread to finish");
     ocad_thread.join().expect("Unable to finish OCAD thread");
 
 }

@@ -53,7 +53,7 @@ impl ObjectType {
 pub struct Object {
     pub object_type: ObjectType,
     pub symbol_number: i32,
-    pub segments: Vec<Segment>,
+    segments: Vec<Segment>,
 }
 
 pub enum GraphSymbol {
@@ -62,6 +62,14 @@ pub enum GraphSymbol {
 }
 
 impl Object {
+
+    pub fn termination() -> Object {
+        Object {
+            object_type: ObjectType::Terminate,
+            symbol_number: 0i32,
+            segments: Vec::new(),
+        }
+    }
 
     fn empty_object(gsymbol: &GraphSymbol) -> Object {
         match gsymbol {
@@ -77,7 +85,7 @@ impl Object {
         }
     }
 
-    pub fn push(&mut self, s: Segment) {
+    fn push(&mut self, s: Segment) {
         self.segments.push(s)
     }
 
