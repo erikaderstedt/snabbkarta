@@ -1,5 +1,58 @@
 use super::sweref_to_wgs84::Sweref;
 
+#[derive(Clone,Copy,Debug)]
+pub struct Rectangle {
+    pub southwest: Sweref, 
+    pub northeast: Sweref,
+}
+
+impl Rectangle {
+
+    pub fn create(xmin: f64, ymin: f64, xmax: f64, ymax: f64) -> Self {
+        Self {
+            southwest: Sweref { east: xmin, north: ymin, },
+            northeast: Sweref { east: xmax, north: ymax, },
+        }
+    }
+
+    fn northwest(&self) -> Sweref { Sweref { north: self.northeast.north, east: self.southwest.east } }
+    fn southeast(&self) -> Sweref { Sweref { north: self.southwest.north, east: self.northeast.east } }
+
+    pub fn middle(&self) -> Sweref { 
+        Sweref {
+            north: (self.southwest.north + self.northeast.north) * 0.5,
+            east: (self.southwest.east + self.northeast.east) * 0.5,
+        }
+    }
+    
+    pub fn segments(&self) -> Vec<LineSegment> {
+
+        let nw = self.northwest();
+        let se = self.southeast();
+        vec![
+            LineSegment { p0: self.southwest.clone(), p1: se.clone() },
+            LineSegment { p0: se.clone(), p1: self.northeast.clone() },
+            LineSegment { p0: self.northeast.clone(), p1: nw.clone() },
+            LineSegment { p0: nw.clone(), p1: self.southwest.clone() },
+        ]
+    }
+
+    pub fn contains(&self, p: &Sweref) -> bool {
+        p.east <= self.northeast.east && 
+        p.east >= self.southwest.east && 
+        p.north >= self.southwest.north &&
+        p.north <= self.northeast.north
+    }
+
+    pub fn intersects(&self, other: &Self) -> bool {
+        self.contains(&other.southwest) || 
+        self.contains(&other.southeast()) || 
+        self.contains(&other.northeast) ||
+        self.contains(&other.northwest())
+    }
+
+}
+
 pub struct LineSegment {
     pub p0: Sweref,
     pub p1: Sweref,
@@ -9,17 +62,6 @@ impl LineSegment {
 
     pub fn create(a: &Sweref, b: &Sweref) -> LineSegment {
         LineSegment { p0: a.clone(), p1: b.clone() }
-    }
-
-    pub fn segments_from_bounding_box(sw: &Sweref, ne: &Sweref) -> Vec<LineSegment> {
-        let nw = Sweref { north: ne.north, east: sw.east };
-        let se = Sweref { north: sw.north, east: ne.east };
-        vec![
-            LineSegment { p0: sw.clone(), p1: se.clone() },
-            LineSegment { p0: se.clone(), p1: ne.clone() },
-            LineSegment { p0: ne.clone(), p1: nw.clone() },
-            LineSegment { p0: nw.clone(), p1: sw.clone() },
-        ]
     }
 
     pub fn intersection_with(&self, other: &LineSegment) -> Option<Sweref> {

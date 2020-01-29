@@ -1,35 +1,14 @@
 use std::fs;
-use std::sync::mpsc::Receiver;
-use std::mem;
+use std::sync::mpsc::{Sender,Receiver};
 use std::io::{Cursor, Read, Seek, SeekFrom, Write};
-use std::slice;
-use std::convert::TryInto;
 use byteorder::{LittleEndian, ReadBytesExt};
 use std::path::PathBuf;
+use super::ffi_helpers::*;
+use std::convert::TryInto;
+use std::mem;
+use super::geometry;
 
 static SOFT_ISOM_2017: &'static [u8] = include_bytes!("../20170608_symboluppsattning_isom_2017_ocad_12.ocd");
-
-fn read_instance<T: Sized>(reader: &mut dyn Read) -> T {
-    let mut x: T = unsafe { mem::zeroed() };
-    let sz = mem::size_of::<T>();
-    let slice = unsafe { slice::from_raw_parts_mut(&mut x as *mut _ as *mut u8, sz) };
-    reader.read_exact(slice).expect("Unable to read instance from OCAD file");
-    x
-}
-
-fn write_instance<T: Sized>(x: &T, writer: &mut dyn Write) -> std::io::Result<usize> {
-    let slice = unsafe { slice::from_raw_parts((x as *const T) as *const u8, mem::size_of::<T>()) };
-    writer.write(slice)
-}
-
-fn write_instances<T: Sized>(x: &Vec<T>, writer: &mut dyn Write) -> std::io::Result<usize> {
-    let slice = unsafe { slice::from_raw_parts(x.as_ptr() as *const u8, mem::size_of::<T>()*x.len()) };
-    writer.write(slice)
-}
-
-fn ftell(file: &mut dyn Seek) -> u32 {
-    file.seek(SeekFrom::Current(0)).expect("Unable to obtain file position").try_into().expect("File size too large")
-}
 
 use super::sweref_to_wgs84::Sweref as Point;
 
@@ -42,7 +21,7 @@ enum PointType {
 }
 
 #[derive(Clone,Debug)]
-pub enum Segment {
+enum Segment {
     Move(Point),
     Bezier(Point,Point,Point),
     Line(Point),
@@ -77,9 +56,32 @@ pub struct Object {
     pub segments: Vec<Segment>,
 }
 
+pub enum GraphSymbol {
+    Stroke(i32, bool),
+    Fill(i32),
+}
+
 impl Object {
 
-    fn polys(&self, angle: f64, xoff: f64, yoff: f64) -> Vec<TDPoly> {
+    fn empty_object(gsymbol: &GraphSymbol) -> Object {
+        match gsymbol {
+            GraphSymbol::Stroke(symbol_number, cornerize) => Object { 
+                object_type: ObjectType::Line(*cornerize), 
+                symbol_number: *symbol_number, segments: vec![],
+            },
+            GraphSymbol:: Fill(symbol_number) => Object {
+                object_type: ObjectType::Area,
+                symbol_number: *symbol_number,
+                segments: vec![],
+            },
+        }
+    }
+
+    pub fn push(&mut self, s: Segment) {
+        self.segments.push(s)
+    }
+
+    fn polys(&self, angle: f64, middle: &Point) -> Vec<TDPoly> {
 
         fn convert_to_upper_24_bits(p: f64) -> i32 {
             if p < 0f64 {
@@ -96,8 +98,8 @@ impl Object {
             // 1 bit = 0.01 mm.
             // Map scale  1:15000 =>
             // 1 bit 0.15 m.
-            let vx = (p.east - xoff) / 0.15f64;
-            let vy = (p.north - yoff) / 0.15f64;
+            let vx = (p.east - middle.east) / 0.15f64;
+            let vy = (p.north - middle.north) / 0.15f64;
             let x = convert_to_upper_24_bits( vx * c + vy * s);
             let y = convert_to_upper_24_bits(-vx * s + vy * c);
             match t {
@@ -135,17 +137,83 @@ struct Strings {
     record_type: i32,
 }
 
+fn is_clockwise(p: &Vec<Point>) -> bool {
+    p.windows(2).fold(0f64, |sum, pts| sum + pts[0].east*pts[1].north - pts[1].east*pts[0].north) < 0f64
+}
+
+pub fn post_objects(vertex_lists: Vec<Vec<Point>>, symbols: &Vec<GraphSymbol>, post_box: &Sender<Object>, bounding_box: &geometry::Rectangle) {
+
+    let intersect = |segment: &geometry::LineSegment| { bounding_box.segments().into_iter()
+        .filter_map(|edge| edge.intersection_with(&segment))
+        .next()
+        .expect("No intersection with bounding box edge") };
+
+    for symbol in symbols.iter() {
+        let mut object = Object::empty_object(symbol); 
+
+        for vertices in vertex_lists.iter() {   
+
+            let mut current_point: Option<Point> = None;
+            let mut is_outside = true;
+
+            for vertex in vertices.iter() {
+                
+                let this_is_outside = !bounding_box.contains(vertex);
+                match (is_outside, this_is_outside) {
+                    (false, true) => { // Going outside
+                        let segment = geometry::LineSegment::create(&current_point.unwrap(), vertex);
+                        object.push(Segment::Line(intersect(&segment)));
+
+                        match object.object_type {
+                            ObjectType::Line(_) => { post_box.send(object).expect("Unable to send OSM object to OCAD."); object = Object::empty_object(symbol);},
+                            _ => {}
+                        }
+                    },
+                    (true, false) => { // Going inside
+                        if let Some(p) = current_point {
+                            let segment = geometry::LineSegment::create(&p, vertex);
+                            let intersect_point = intersect(&segment);
+                            object.push(match symbol {
+                                GraphSymbol::Stroke(_,_) => Segment::Move(intersect_point),
+                                GraphSymbol::Fill(_) => Segment::Line(intersect_point),
+                            });
+                            object.push(Segment::Line(vertex.clone()));
+                        } else {
+                            object.push(Segment::Move(vertex.clone()));
+                        }
+                    },
+                    (false,false) => { // Only inside
+                        object.push(Segment::Line(vertex.clone()));
+                    },
+                    (true,true) => { continue }, // Only outside
+                }
+                current_point = Some(vertex.clone());
+                is_outside = this_is_outside;
+            }
+            match object.object_type {
+                ObjectType::Line(_) if object.segments.len() > 0 => { post_box.send(object).expect("Unable to send OSM object to OCAD."); object = Object::empty_object(symbol);},
+                _ => {}
+            }
+        }
+        match object.object_type {
+            ObjectType::Area if object.segments.len() > 0 => { post_box.send(object).expect("Unable to send OSM object to OCAD."); },
+            _ => {}
+        }
+    }
+
+}
+
 fn load_from_isom() -> (Vec<Vec<u8>>, Vec<Strings>) {
     let mut data = Cursor::new(SOFT_ISOM_2017);
 
-    let header: RawFileHeader = read_instance(&mut data);
+    let header: RawFileHeader = read_instance(&mut data).expect("Unable to load ISOM file header.");
 
     let mut symbols: Vec<Vec<u8>> = Vec::new();
 
     let mut next_symbol_index: u64 = header.symbolindex.into();
     while next_symbol_index != 0 {
         data.seek(SeekFrom::Start(next_symbol_index)).expect("Unable to seek to start of symbol index.");
-        let symbol_block: SymbolBlock = read_instance(&mut data);
+        let symbol_block: SymbolBlock = read_instance(&mut data).expect("Unable to load symbol block.");
 
         next_symbol_index = symbol_block.nextsymbolblock as u64;
         let indices = symbol_block.symbol_indices;
@@ -166,7 +234,7 @@ fn load_from_isom() -> (Vec<Vec<u8>>, Vec<Strings>) {
     let mut next_string_index: u64 = header.stringindex.into();
     while next_string_index != 0 {
         data.seek(SeekFrom::Start(next_string_index)).unwrap();
-        let string_block: StringIndexBlock = read_instance(&mut data);
+        let string_block: StringIndexBlock = read_instance(&mut data).expect("Unable to load string index block.");
 
         next_string_index = string_block.nextindexblock as u64;
         let indices = string_block.indices;
@@ -185,12 +253,11 @@ fn load_from_isom() -> (Vec<Vec<u8>>, Vec<Strings>) {
     (symbols, strings.into_iter().filter(|x| match x.record_type { 9 | 10 => true, _ => false }).collect())
 }
 
-pub fn create(path: &PathBuf, southwest_corner: &Point, northeast_corner: &Point, angle: f64, queue: &Receiver<Object>) {
+pub fn create(path: &PathBuf, bounding_box: &geometry::Rectangle, angle: f64, queue: &Receiver<Object>) {
     let (mut soft_symbols, mut soft_strings) = load_from_isom();
 
-    let x0 = (northeast_corner.east + southwest_corner.east)*0.5;
-    let y0 = (northeast_corner.north + southwest_corner.north)*0.5;
-    let m_string = format!("\tm15000.0000\tg0.0000\tr1\tx{:.8}\ty{:.8}\ta{:.8}", x0, y0, angle);
+    let middle = bounding_box.middle();
+    let m_string = format!("\tm15000.0000\tg0.0000\tr1\tx{:.8}\ty{:.8}\ta{:.8}", middle.east, middle.north, angle);
 
     soft_strings.push( Strings {
         s: m_string.as_bytes().to_vec(),
@@ -278,7 +345,7 @@ pub fn create(path: &PathBuf, southwest_corner: &Point, northeast_corner: &Point
         let object = queue.recv().expect("Unable to receive message on OCAD thread.");
         if object.object_type == ObjectType::Terminate { break; }
 
-        let p = object.polys(angle, x0, y0);
+        let p = object.polys(angle, &middle);
 
         let element = Element {
             symbol_number: object.symbol_number,

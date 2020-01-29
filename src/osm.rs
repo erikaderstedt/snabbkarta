@@ -1,5 +1,5 @@
 extern crate osm_xml as osm;
-extern crate reqwest;
+extern crate ureq;
 extern crate colored;
 
 use std::sync::mpsc::Sender;
@@ -8,7 +8,7 @@ use std::fs::{File};
 use colored::*;
 use std::io;
 use osm::Node;
-use super::ocad;
+use super::ocad::{self, GraphSymbol};
 use super::geometry;
 
 fn resolve_way<'a>(way: &'a osm::Way, doc: &'a osm::OSM) -> Vec<&'a Node> {
@@ -23,95 +23,10 @@ fn to_sweref(nodes: &Vec<&Node>) -> Vec<Sweref> {
     nodes.iter().map(|node| Sweref::from_wgs84( &Wgs84 { latitude: node.lat, longitude: node.lon } )).collect()
 }
 
-enum GraphSymbol {
-    Stroke(i32, bool),
-    Fill(i32),
-}
+fn post_way(ways: Vec<Vec<&Node>>, symbols: &Vec<ocad::GraphSymbol>, post_box: &Sender<ocad::Object>, bounding_box: &geometry::Rectangle) {
+    let pts: Vec<Vec<Sweref>> = ways.iter().map(|w| to_sweref(w)).collect();
 
-impl ocad::Object {
-
-    fn empty_object(gsymbol: &GraphSymbol) -> ocad::Object {
-        match gsymbol {
-            GraphSymbol::Stroke(symbol_number, cornerize) => ocad::Object { 
-                object_type: ocad::ObjectType::Line(*cornerize), 
-                symbol_number: *symbol_number, segments: vec![],
-            },
-            GraphSymbol:: Fill(symbol_number) => ocad::Object {
-                object_type: ocad::ObjectType::Area,
-                symbol_number: *symbol_number,
-                segments: vec![],
-            },
-        }
-    }
-
-    fn push(&mut self, s: ocad::Segment) {
-        self.segments.push(s)
-    }
-
-}
-
-fn post_way(ways: Vec<Vec<&Node>>, symbols: &Vec<GraphSymbol>, post_box: &Sender<ocad::Object>, bounding_box: &Vec<geometry::LineSegment>) {
-    let sw = &bounding_box[0].p0;
-    let ne = &bounding_box[2].p0;
-    let outside = |vertex: &Sweref| vertex.east < sw.east || vertex.east > ne.east || vertex.north > ne.north || vertex.north < sw.north;
-    let intersect = |segment: &geometry::LineSegment| { bounding_box.iter()
-        .filter_map(|edge| edge.intersection_with(&segment))
-        .next()
-        .expect("No intersection with bounding box edge") };
-
-    for symbol in symbols.iter() {
-        let mut object = ocad::Object::empty_object(symbol); 
-
-        for way in ways.iter() {            
-            let vertices = to_sweref(&way);
-
-            let mut current_point: Option<Sweref> = None;
-            let mut is_outside = true;
-
-            for vertex in vertices.iter() {
-                let this_is_outside = outside(vertex);
-                match (is_outside, this_is_outside) {
-                    (false, true) => { // Going outside
-                        let segment = geometry::LineSegment::create(&current_point.unwrap(), vertex);
-                        object.push(ocad::Segment::Line(intersect(&segment)));
-
-                        match object.object_type {
-                            ocad::ObjectType::Line(_) => { post_box.send(object).expect("Unable to send OSM object to OCAD."); object = ocad::Object::empty_object(symbol);},
-                            _ => {}
-                        }
-                    },
-                    (true, false) => { // Going inside
-                        if let Some(p) = current_point {
-                            let segment = geometry::LineSegment::create(&p, vertex);
-                            let intersect_point = intersect(&segment);
-                            object.push(match symbol {
-                                GraphSymbol::Stroke(_,_) => ocad::Segment::Move(intersect_point),
-                                GraphSymbol::Fill(_) => ocad::Segment::Line(intersect_point),
-                            });
-                            object.push(ocad::Segment::Line(vertex.clone()));
-                        } else {
-                            object.push(ocad::Segment::Move(vertex.clone()));
-                        }
-                    },
-                    (false,false) => { // Only inside
-                        object.push(ocad::Segment::Line(vertex.clone()));
-                    },
-                    (true,true) => { continue }, // Only outside
-                }
-                current_point = Some(vertex.clone());
-                is_outside = this_is_outside;
-            }
-            match object.object_type {
-                ocad::ObjectType::Line(_) if object.segments.len() > 0 => { post_box.send(object).expect("Unable to send OSM object to OCAD."); object = ocad::Object::empty_object(symbol);},
-                _ => {}
-            }
-        }
-        match object.object_type {
-            ocad::ObjectType::Area if object.segments.len() > 0 => { post_box.send(object).expect("Unable to send OSM object to OCAD."); },
-            _ => {}
-        }
-    }
-
+    ocad::post_objects(pts, symbols, post_box, bounding_box);
 }
 
 pub fn load_osm(southwest: &Wgs84, northeast: &Wgs84, file: &Sender<ocad::Object>, verbose: bool) {
@@ -130,29 +45,23 @@ pub fn load_osm(southwest: &Wgs84, northeast: &Wgs84, file: &Sender<ocad::Object
             southwest.latitude, southwest.longitude,
             northeast.latitude, northeast.longitude);
 
-            let client  = reqwest::blocking::Client::new();
-            let mut res = match client.post("https://lz4.overpass-api.de/api/interpreter")
-                    .body(query)
-                    .send() {
-                Ok(r) => r,
-                Err(e) => {
-                    println!("[{}] OSM fetch error: {}", &module, e);
-                    return
-                },
-            };
-            { 
+            let resp = ureq::post("https://lz4.overpass-api.de/api/interpreter")
+                    .send_string(&query);
+            
+            if resp.ok() {
+                let mut r = resp.into_reader();
                 let mut f = File::create(&cache_path).expect("Unable to create OSM cache path.");
-                io::copy(&mut res, &mut f).expect("Unable to write to OSM cache.");
-            };
-            File::open(&cache_path).expect("Unable to open the cache I just wrote!")
+                io::copy(&mut r, &mut f).expect("Unable to write to OSM cache.");
+                File::open(&cache_path).expect("Unable to open the cache I just wrote!")
+            } else {
+                println!("[{}] OSM fetch error: {}", &module, resp.status_text());
+                return;
+            }
         }
     };
     let doc = osm::OSM::parse(reader).expect("Unable to parse OSM file.");
 
-    let sw = Sweref::from_wgs84(&southwest);
-    let ne = Sweref::from_wgs84(&northeast);
-    let bounding_box = geometry::LineSegment::segments_from_bounding_box(&sw, &ne);
-
+    let bounding_box = geometry::Rectangle { southwest: Sweref::from_wgs84(&southwest), northeast: Sweref::from_wgs84(&northeast), };
     if verbose { println!("[{}] {} nodes, {} ways and {} relations", &module, doc.nodes.len(), doc.ways.len(), doc.relations.len()); }
 
     for (_, relation) in doc.relations.iter() {

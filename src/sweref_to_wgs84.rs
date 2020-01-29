@@ -1,6 +1,6 @@
 use std::f64;
 
-#[derive(Clone,Debug)]
+#[derive(Clone,Debug,Copy)]
 pub struct Sweref {
     pub north: f64,
     pub east: f64

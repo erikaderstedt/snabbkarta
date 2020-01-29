@@ -7,6 +7,7 @@ use std::slice;
 use std::io::SeekFrom;
 use std::io::Read;
 use std::fs::File;
+use super::ffi_helpers::{read_instance, read_instances};
 
 #[repr(C, packed)]
 pub struct LAS_File_Header {
@@ -57,22 +58,11 @@ impl LAS_File_Header {
             Ok(file) => file,
         };
 
-        let mut hdr: LAS_File_Header = unsafe { mem::zeroed() };
-        let hdr_size = mem::size_of::<LAS_File_Header>();
-        unsafe {
-            let hdr_slice = slice::from_raw_parts_mut(
-                &mut hdr as *mut _ as *mut u8,
-                hdr_size
-            );
-            file.read_exact(hdr_slice).unwrap();
-        }
-        return hdr;
+        read_instance(&mut file).expect("Unable to read LAS file header.")
     }
-
 }
 
 #[repr(C, packed)]
-
 pub struct PointDataRecord {
     pub x: i32,
     pub y: i32,
@@ -87,23 +77,13 @@ pub struct PointDataRecord {
 }
 
 impl PointDataRecord {
-
     pub fn load_from(path: &Path) -> Vec<PointDataRecord> {
         let header = LAS_File_Header::new(path);
         let mut file = File::open(path).unwrap(); 
 
         file.seek(SeekFrom::Start(header.offset_to_point_data.into())).unwrap();
 
-        let struct_size = ::std::mem::size_of::<PointDataRecord>();
-        let num_structs = header.number_of_point_records as usize;
-        let num_bytes = num_structs * struct_size;
-        let mut r = Vec::<PointDataRecord>::with_capacity(num_structs);
-        unsafe {
-            let buffer = slice::from_raw_parts_mut(r.as_mut_ptr() as *mut u8, num_bytes);
-            file.read_exact(buffer).unwrap();
-            r.set_len(num_structs);
-        }
-        r
+        read_instances(&mut file, header.number_of_point_records as usize).expect("Unable to read point data records from LAS file.")
     } 
 }
 
