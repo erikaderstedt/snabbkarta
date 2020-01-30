@@ -41,8 +41,8 @@ impl ObjectType {
     fn ocad_object_type(&self) -> u8 {
         match self {
             Self::Point(_) => 1,
-            Self::Area => 2,
-            Self::Line(_) => 3,
+            Self::Area => 3,
+            Self::Line(_) => 2,
             Self::Rectangle => 4,
             Self::Terminate => panic!("No valid object type for Terminate request.")
         }
@@ -77,7 +77,7 @@ impl Object {
                 object_type: ObjectType::Line(*cornerize), 
                 symbol_number: *symbol_number, segments: vec![],
             },
-            GraphSymbol:: Fill(symbol_number) => Object {
+            GraphSymbol::Fill(symbol_number) => Object {
                 object_type: ObjectType::Area,
                 symbol_number: *symbol_number,
                 segments: vec![],
@@ -411,6 +411,9 @@ pub fn create(path: &PathBuf, bounding_box: &geometry::Rectangle, angle: f64, qu
     }
 
     end_object_index(start_pos, &mut object_index, &mut file);
+
+    file.seek(SeekFrom::Start(0)).expect("Unable to seek back to beginning of file.");
+    write_instance(&header, &mut file).expect("Unable to write OCAD header.");
 }
 
 #[repr(C,packed)]
@@ -490,6 +493,7 @@ struct ObjectIndexBlock {
     indices: [ObjectIndex;256],
 }
 
+#[repr(C,packed)]
 struct Element {
     symbol_number: i32,
     object_type: u8,
