@@ -2,10 +2,7 @@ use std;
 use std::error::Error;
 use std::io::prelude::*;
 use std::path::Path;
-use std::mem;
-use std::slice;
 use std::io::SeekFrom;
-use std::io::Read;
 use std::fs::File;
 use super::ffi_helpers::{read_instance, read_instances};
 

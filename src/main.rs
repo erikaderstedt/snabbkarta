@@ -1,11 +1,9 @@
 extern crate getopts;
-extern crate delaunator;
 extern crate colored;
 
 use getopts::Options;
 use std::env;
 use std::path::Path;
-use delaunator::{Point, triangulate};
 use std::f64;
 use std::f64::consts::PI;
 use colored::*;
@@ -20,20 +18,18 @@ mod ocad;
 mod geometry;
 mod shapefiles;
 mod ffi_helpers;
+mod lakes;
+mod dtm;
+mod boundary;
+
 use sweref_to_wgs84::{Sweref,Wgs84};
+use dtm::Point3D;
 
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 fn print_usage(program: &str, opts: Options) {
     let brief = format!("Usage: {} [options] <las file> [...<las file>]*", program);
     print!("{}", opts.usage(&brief));
-}
-
-#[derive(Copy,Clone)]
-struct Point3D {
-    x: f64,
-    y: f64,
-    z: f64,
 }
 
 fn main() {
@@ -141,21 +137,15 @@ r#"   _____             __    __    __              __
     });
 
     let records: Vec<las::PointDataRecord> = matches.free.iter().map(|x| las::PointDataRecord::load_from(Path::new(&x))).flatten().collect();
-    let ground_points: Vec<Point> = records.iter()
-        .filter(|record| record.classification == 2)
-        .map(|record| Point { x: ((record.x as f64) * x_scale_factor + x_offset) - min_x,
-                        y: ((record.y as f64) * y_scale_factor + y_offset) - min_y })
-        .collect();
 
-
-    let to_point_3d = |record: las::PointDataRecord| Point3D {
+    let to_point_3d = |record: &las::PointDataRecord| Point3D {
         x: ((record.x as f64) * x_scale_factor + x_offset) - min_x,
         y: ((record.y as f64) * y_scale_factor + y_offset) - min_y,
         z: ((record.y as f64) * z_scale_factor + z_offset) - min_z,
     };
 
-    let result = triangulate(&ground_points).expect("No triangulation exists.");
-    println!("[{}] DTM triangulation complete, {:?} triangles", &module, result.len());
+    let dtm = dtm::DigitalTerrainModel::create(&records, &to_point_3d);
+    println!("[{}] DTM triangulation complete, {:?} triangles", &module, dtm.num_triangles);
 
     preexisting_map_thread.join().expect("Unable to finish pre-existing map thread");
     ocad_tx.send(ocad::Object::termination()).expect("Unable to tell OCAD thread to finish");
