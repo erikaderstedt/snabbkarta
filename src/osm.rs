@@ -99,7 +99,7 @@ pub fn load_osm(southwest: &Wgs84, northeast: &Wgs84, file: &Sender<ocad::Object
         let mut t = Vec::new();
         for tag in way.tags.iter() {
             t = match (&tag.key[..], &tag.val[..]) {
-                ("landuse","residential") => vec![GraphSymbol::Stroke(520000,false), GraphSymbol::Fill(521001)],
+                ("landuse","residential") => vec![GraphSymbol::Stroke(520001,false), GraphSymbol::Fill(408000)], // 520000, but symbol seems broken in SOFT's file?
                 ("landuse","meadow") => vec![GraphSymbol::Stroke(415000,false), GraphSymbol::Fill(412000)],
                 ("highway","path") => vec![GraphSymbol::Stroke(506000,false)],
                 ("highway","track") => vec![GraphSymbol::Stroke(505000,false)],
