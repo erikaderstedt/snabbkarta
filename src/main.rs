@@ -128,17 +128,17 @@ r#"   _____             __    __    __              __
             &ocad_rx);
     });
 
-    let tx = ocad_tx.clone();
+    let tx_preexisting = ocad_tx.clone();
     let preexisting_map_thread = thread::spawn(move || {
         match shp_path {
-            None => { osm::load_osm(&southwest_corner, &northeast_corner, &tx, verbose); },
-            Some(p) => { shapefiles::load_shapefiles(&bounding_box, &Path::new(&p), &tx, verbose); },
+            None => { osm::load_osm(&southwest_corner, &northeast_corner, &tx_preexisting, verbose); },
+            Some(p) => { shapefiles::load_shapefiles(&bounding_box, &Path::new(&p), &tx_preexisting, verbose); },
         }
     });
 
     let records: Vec<las::PointDataRecord> = matches.free.iter().map(|x| las::PointDataRecord::load_from(Path::new(&x))).flatten().collect();
 
-    let to_point_3d = |record: &las::PointDataRecord| Point3D {
+    let to_point_3d = move |record: &las::PointDataRecord| Point3D {
         x: ((record.x as f64) * x_scale_factor + x_offset) - min_x,
         y: ((record.y as f64) * y_scale_factor + y_offset) - min_y,
         z: ((record.y as f64) * z_scale_factor + z_offset) - min_z,
@@ -147,8 +147,15 @@ r#"   _____             __    __    __              __
     let dtm = dtm::DigitalTerrainModel::create(&records, &to_point_3d);
     println!("[{}] DTM triangulation complete, {:?} triangles", &module, dtm.num_triangles);
 
-    preexisting_map_thread.join().expect("Unable to finish pre-existing map thread");
-    ocad_tx.send(ocad::Object::termination()).expect("Unable to tell OCAD thread to finish");
-    ocad_thread.join().expect("Unable to finish OCAD thread");
+    let tx_lakes = ocad_tx.clone();
+    let lake_thread = thread::spawn(move || {
+        lakes::handler(&records, &to_point_3d, &dtm, tx_lakes);
+    });
+
+    preexisting_map_thread.join().expect("Unable to finish pre-existing map thread.");
+    lake_thread.join().expect("Unable to finish lake thread.");
+
+    ocad_tx.send(ocad::Object::termination()).expect("Unable to tell OCAD thread to finish.");
+    ocad_thread.join().expect("Unable to finish OCAD thread.");
 
 }

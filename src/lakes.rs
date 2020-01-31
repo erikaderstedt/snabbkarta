@@ -4,9 +4,17 @@ use delaunator::EMPTY;
 use super::ocad;
 use std::sync::mpsc::Sender;
 use super::las::PointDataRecord;
-use super::dtm::{DigitalTerrainModel,Point3D};
+use super::dtm::{DigitalTerrainModel,Point3D,Halfedge};
+use super::boundary::Boundary;
 
-fn handler( records: &Vec<PointDataRecord>, record_to_point3D: &dyn Fn(&PointDataRecord) -> Point3D,
+const Z_NORMAL_REQUIREMENT: f64 = 0.9993f64;
+
+pub fn should_grow_lake(lake: &Boundary, halfedge: Halfedge) -> bool {
+    true
+}
+
+
+pub fn handler( records: &Vec<PointDataRecord>, record_to_point3D: &dyn Fn(&PointDataRecord) -> Point3D,
             dtm: &DigitalTerrainModel, 
             post_box: Sender<ocad::Object>) {
 
@@ -28,12 +36,28 @@ fn handler( records: &Vec<PointDataRecord>, record_to_point3D: &dyn Fn(&PointDat
         }
     }
 
+    let mut lake_index: usize = 1;
+
     for i in 0..water_points.len() {
         triangle = triangle_indices_for_water_points[i];
         
-    }
+        if dtm.normals[triangle][2] >= Z_NORMAL_REQUIREMENT {
+            let mut lake = Boundary {
+                halfedges: Vec::new(),
+                index: lake_index,
+                dtm: dtm,
+                indices_for_each_triangle: &mut lake_indices_for_triangles,
+            };
 
-        
+            lake.grow_from_triangle(triangle, &should_grow_lake);
+
+            if lake.halfedges.len() > 3 {
+                
+            }
+
+            lake_index = lake_index + 1;
+        }
+    }
 
     // Creat
 }

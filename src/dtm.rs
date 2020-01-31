@@ -3,6 +3,28 @@ extern crate delaunator;
 use super::las::PointDataRecord;
 use delaunator::{Point,triangulate,EMPTY};
 
+pub type Halfedge = usize;
+
+pub trait TriangleWalk {
+    fn next(&self) -> Halfedge;
+    fn prev(&self) -> Halfedge;
+}
+
+impl TriangleWalk for Halfedge {
+    fn next(&self) -> Halfedge {
+        match self % 3 {
+            2 => self - 2,
+            _ => self + 1,
+        }
+    }
+    fn prev(&self) -> Halfedge {
+        match self % 3 {
+            0 => self + 2,
+            _ => self - 1,
+        }
+    }    
+}
+
 #[derive(Copy,Clone)]
 pub struct Point3D {
     pub x: f64,
@@ -18,12 +40,18 @@ impl Point3D {
         let toselfy = self.y - p0.y;
         vx*toselfy - vy*toselfx > 0f64
     }
+
+    fn distance_2d_to(&self, other: &Point3D) -> f64 {
+        let dx = other.x - self.x;
+        let dy = other.y - self.y;
+        f64::sqrt(dx*dx + dy*dy)
+    }
 }
 
 pub struct DigitalTerrainModel {
     pub points: Vec<super::Point3D>,
     pub triangles: Vec<usize>,
-    pub halfedges: Vec<usize>,
+    pub halfedges: Vec<Halfedge>,
     pub num_triangles: usize,
     pub normals: Vec<[f64;3]>,
     pub exterior: Vec<bool>,
@@ -53,6 +81,16 @@ impl Iterator for TriangleIterator <'_> {
 }
 
 impl DigitalTerrainModel {
+
+    pub fn opposite(&self, h: Halfedge) -> Halfedge {
+        self.halfedges[h]
+    }
+
+    pub fn length_of_halfedge(&self, h: Halfedge) -> f64 {
+        let p0 = self.points[self.triangles[h]];
+        let p1 = self.points[self.triangles[h.next()]];
+        p0.distance_2d_to(&p1)
+    }
 
     fn triangle_iter<'a>(&'a self) -> TriangleIterator {
         TriangleIterator { dtm: self, triangle_index: 0, }
