@@ -12,7 +12,7 @@ pub fn add_meridians(bounding_box: &geometry::Rectangle,
     verbose: bool) {
 
     if verbose {
-        println!("[{}] Adding meridians at {} m spacing.", "MISC".black(), MERIDIAN_SPACING);
+        println!("[{}] Adding meridians at {} m spacing.", "MISC".magenta(), MERIDIAN_SPACING);
     }
 
     let middle = bounding_box.middle();

@@ -56,6 +56,7 @@ pub struct Object {
     segments: Vec<Segment>,
 }
 
+#[derive(Debug)]
 pub enum GraphSymbol {
     Stroke(i32, bool),
     Fill(i32),
@@ -149,6 +150,35 @@ fn is_clockwise(p: &Vec<Point>) -> bool {
     p.windows(2).fold(0f64, |sum, pts| sum + pts[0].east*pts[1].north - pts[1].east*pts[0].north) < 0f64
 }
 
+pub fn post_objects_without_clipping(vertex_lists: Vec<Vec<Point>>, symbols: &Vec<GraphSymbol>, post_box: &Sender<Object>) {
+
+    for symbol in symbols.iter() {
+        let mut object = Object::empty_object(symbol); 
+
+        for vertices in vertex_lists.iter() {   
+            let mut segments: Vec<Segment> = vertices.iter().enumerate().map(|vertex| {
+                match vertex.0 {
+                    0 => Segment::Move(vertex.1.clone()),
+                    _ => Segment::Line(vertex.1.clone()),
+                }
+            }).collect();
+            object.segments.append(&mut segments);
+
+            match object.object_type {
+                ObjectType::Line(_) if object.segments.len() > 0 => { post_box.send(object).expect("Unable to send OSM object to OCAD."); object = Object::empty_object(symbol);},
+                ObjectType::Line(_) => {
+                    println!("Line, but no segment. Symbol {:?} {}",symbol, vertices.len());
+                }
+                _ => {}
+            }
+        }
+        match object.object_type {
+            ObjectType::Area if object.segments.len() > 0 => { post_box.send(object).expect("Unable to send OSM object to OCAD."); },
+            _ => {}
+        }
+    }
+}
+
 pub fn post_objects(vertex_lists: Vec<Vec<Point>>, symbols: &Vec<GraphSymbol>, post_box: &Sender<Object>, bounding_box: &geometry::Rectangle) {
 
     let intersect = |segment: &geometry::LineSegment| { bounding_box.segments().into_iter()
@@ -208,7 +238,6 @@ pub fn post_objects(vertex_lists: Vec<Vec<Point>>, symbols: &Vec<GraphSymbol>, p
             _ => {}
         }
     }
-
 }
 
 fn load_from_isom() -> (Vec<Vec<u8>>, Vec<Strings>) {
@@ -470,8 +499,8 @@ struct StringIndexBlock {
     indices: [StringIndex;256],
 }
 
-#[repr(C,packed)]
 #[derive(Copy,Clone)]
+#[repr(C,packed)]
 struct ObjectIndex {
     rc: LRect,
     position: u32,

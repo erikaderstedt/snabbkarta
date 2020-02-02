@@ -117,10 +117,6 @@ r#"
             middle_of_map.longitude);
     }
 
-    // Set up OCAD file, with two receive channels. 
-    // Start OSM curl.
-    // 
-
     let (ocad_tx, ocad_rx): (Sender<ocad::Object>, Receiver<ocad::Object>) = channel();
     let ocad_thread = thread::spawn(move || {
         ocad::create(&output_path, 
@@ -140,18 +136,19 @@ r#"
     let records: Vec<las::PointDataRecord> = matches.free.iter().map(|x| las::PointDataRecord::load_from(Path::new(&x))).flatten().collect();
 
     let to_point_3d = move |record: &las::PointDataRecord| Point3D {
-        x: ((record.x as f64) * x_scale_factor + x_offset) - min_x,
-        y: ((record.y as f64) * y_scale_factor + y_offset) - min_y,
-        z: ((record.y as f64) * z_scale_factor + z_offset) - min_z,
+        x: ((record.x as f64) * x_scale_factor + x_offset),
+        y: ((record.y as f64) * y_scale_factor + y_offset),
+        z: ((record.z as f64) * z_scale_factor + z_offset) - min_z,
     };
 
     let dtm = dtm::DigitalTerrainModel::create(&records, &to_point_3d);
     println!("[{}] DTM triangulation complete, {:?} triangles", &module, dtm.num_triangles);
 
     let tx_lakes = ocad_tx.clone();
-    let lake_thread = thread::spawn(move || {
+    let lake_thread = thread::Builder::new().name("lakes".into()).spawn(move || {
         lakes::handler(&records, &to_point_3d, &dtm, tx_lakes);
-    });
+    }).expect("Unable to start lake thread.");
+
     meridians::add_meridians(&bounding_box, magnetic_declination+meridian_convergence, &ocad_tx, verbose);
 
     preexisting_map_thread.join().expect("Unable to finish pre-existing map thread.");

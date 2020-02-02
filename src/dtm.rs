@@ -25,7 +25,7 @@ impl TriangleWalk for Halfedge {
     }    
 }
 
-#[derive(Copy,Clone)]
+#[derive(Copy,Clone,Debug)]
 pub struct Point3D {
     pub x: f64,
     pub y: f64,
@@ -57,29 +57,6 @@ pub struct DigitalTerrainModel {
     pub exterior: Vec<bool>,
 }
 
-struct TriangleIterator <'a> {
-    dtm: &'a DigitalTerrainModel,
-    triangle_index: usize,
-}
-
-impl Iterator for TriangleIterator <'_> {
-    type Item = [super::Point3D;3];
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let nt: usize = self.dtm.num_triangles;
-        let r = match self.triangle_index {
-            nt => None,
-            i => Some([
-                self.dtm.points[self.dtm.triangles[i*3]], 
-                self.dtm.points[self.dtm.triangles[i*3+1]], 
-                self.dtm.points[self.dtm.triangles[i*3+2]],
-            ]),
-        };
-        self.triangle_index = self.triangle_index + 1;
-        r
-    }
-}
-
 impl DigitalTerrainModel {
 
     pub fn opposite(&self, h: Halfedge) -> Halfedge {
@@ -92,15 +69,12 @@ impl DigitalTerrainModel {
         p0.distance_2d_to(&p1)
     }
 
-    fn triangle_iter<'a>(&'a self) -> TriangleIterator {
-        TriangleIterator { dtm: self, triangle_index: 0, }
-    }
-
-    pub fn create(records: &Vec<PointDataRecord>, record_to_point3D: &dyn Fn(&PointDataRecord) -> Point3D) -> DigitalTerrainModel {
+    pub fn create(records: &Vec<PointDataRecord>, record_to_point_3d: &dyn Fn(&PointDataRecord) -> Point3D) -> DigitalTerrainModel {
 
         let ground_points: Vec<Point3D> = records.iter()
             .filter(|record| record.classification == 2)
-            .map(record_to_point3D)
+            .map(record_to_point_3d)
+//            .inspect(|p| println!("{:?}", p) )
             .collect();
 
         let gp_delaunator: Vec<Point> = ground_points.iter().map(|p| Point { x: p.x, y: p.y, }).collect();
@@ -109,16 +83,17 @@ impl DigitalTerrainModel {
         let num_triangles = triangulation.triangles.len() / 3;
         const MARGIN: f64 = 5.0;
 
-        let normals = (0..num_triangles).map(|i| {
-            let p0 = &ground_points[triangulation.triangles[i*3]];
-            let p1 = &ground_points[triangulation.triangles[i*3+1]];
-            let p2 = &ground_points[triangulation.triangles[i*3+2]];
+        let normals = triangulation.triangles[..].chunks(3).map(|i| {
+            let p0 = &ground_points[i[0]];
+            let p1 = &ground_points[i[1]];
+            let p2 = &ground_points[i[2]];
             let v = Point3D { x: p1.x-p0.x, y: p1.y-p0.y, z: p1.z-p0.z };
             let u = Point3D { x: p2.x-p0.x, y: p2.y-p0.y, z: p2.z-p0.z };
             let nx = u.y*v.z - u.z*v.y;
             let ny = u.z*v.x - u.x*v.z;
             let nz = u.x*v.y - u.y*v.x;
             let l = f64::sqrt(nx*nx + ny*ny + nz*nz);
+//            [i[0] as f64, i[1] as f64, i[2] as f64]
             [nx/l, ny/l, nz/l]
         }).collect();
 
