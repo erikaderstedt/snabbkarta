@@ -74,7 +74,7 @@ struct ShapefilePoint {
 
 struct Shapefile {
     shp: fs::File,
-    header: ShapefileHeader,
+    _header: ShapefileHeader,
     pub shape_type: ShapeType,
 }
 
@@ -83,7 +83,7 @@ impl Iterator for Shapefile {
 
     fn next(&mut self) -> Option<(Vec<Vec<Sweref>>, geometry::Rectangle)> {
         
-        let record_header: ShapefileRecordHeader = match read_instance(&mut self.shp) {
+        let _record_header: ShapefileRecordHeader = match read_instance(&mut self.shp) {
             Ok(h) => h,
             Err(_) => { return None },
         };
@@ -110,8 +110,8 @@ impl Shapefile {
         let header: ShapefileHeader = read_instance(&mut file).expect("Unable to read shapefile header.");
 
         match header.shape_type {
-            3 => Some(Shapefile { shp: file, header: header, shape_type: ShapeType::Polyline, }),
-            5 => Some(Shapefile { shp: file, header: header, shape_type: ShapeType::Polygon, }),
+            3 => Some(Shapefile { shp: file, _header: header, shape_type: ShapeType::Polyline, }),
+            5 => Some(Shapefile { shp: file, _header: header, shape_type: ShapeType::Polygon, }),
             _ => None,
         }
     }
@@ -125,7 +125,7 @@ enum ShapeType {
 
 pub fn load_shapefiles(bounding_box: &geometry::Rectangle, 
     folder: &Path,
-    file: &Sender<ocad::Object>, verbose: bool) {
+    _file: &Sender<ocad::Object>, verbose: bool) {
         
     let module = "SHP".yellow();
 
@@ -144,16 +144,16 @@ pub fn load_shapefiles(bounding_box: &geometry::Rectangle,
     for (shp, dbf) in input_files {
         let p = &dbf;
         let mut reader = dbase::Reader::from_path(p).expect("Unable to open dBase-III file!");
-        if let Some(symbol) = LantmaterietShapeSymbol::from_str(p.to_str().expect("Path is not valid UTF-8!")) {
+        if let Some(_symbol) = LantmaterietShapeSymbol::from_str(p.to_str().expect("Path is not valid UTF-8!")) {
             let shp_iter = Shapefile::new(&shp).expect("Unsupported shape type in shapefile");
-            let shape_type = shp_iter.shape_type;
+            let _shape_type = shp_iter.shape_type;
             // Shape files and dbf files.
             // These are read in conjunction. 
-            for (dbf_record, (point_lists, item_bbox)) in reader.iter_records().zip(shp_iter) {
+            for (dbf_record, (_point_lists, item_bbox)) in reader.iter_records().zip(shp_iter) {
                 if !bounding_box.intersects(&item_bbox) { continue; }
 
                 let r = dbf_record.expect("Unable to read DBF record.");
-                let v = match r.get("DETALJTYP").expect("No DETALJTYP field in record.") { 
+                let _v = match r.get("DETALJTYP").expect("No DETALJTYP field in record.") { 
                     dbase::FieldValue::Character(s) => s.as_ref(),
                     _ => panic!("Invalid field value for DETALJTYP field."),
                 };

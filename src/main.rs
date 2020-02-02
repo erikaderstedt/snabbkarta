@@ -74,7 +74,6 @@ r#"
     let output_path = Path::new(&f).with_extension("ocd");
     
     let headers: Vec<las::LAS_File_Header> = matches.free.iter().map(|x| las::LAS_File_Header::new(Path::new(&x))).collect();
-    let total_number_of_records = headers.iter().fold(0, |num_records, header| num_records + header.number_of_point_records);
     let max_x = headers.iter().map(|x| x.max_x).fold(0./0., f64::max);
     let min_x = headers.iter().map(|x| x.min_x).fold(0./0., f64::min);
     let max_y = headers.iter().map(|x| x.max_y).fold(0./0., f64::max);
