@@ -21,6 +21,7 @@ mod ffi_helpers;
 mod lakes;
 mod dtm;
 mod boundary;
+mod meridians;
 
 use sweref_to_wgs84::{Sweref,Wgs84};
 use dtm::Point3D;
@@ -151,6 +152,7 @@ r#"   _____             __    __    __              __
     let lake_thread = thread::spawn(move || {
         lakes::handler(&records, &to_point_3d, &dtm, tx_lakes);
     });
+    meridians::add_meridians(&bounding_box, magnetic_declination+meridian_convergence, &ocad_tx, verbose);
 
     preexisting_map_thread.join().expect("Unable to finish pre-existing map thread.");
     lake_thread.join().expect("Unable to finish lake thread.");

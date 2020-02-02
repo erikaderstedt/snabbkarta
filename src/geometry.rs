@@ -8,6 +8,19 @@ pub struct Rectangle {
 
 impl Rectangle {
 
+    pub fn from_points(pts: &Vec<Sweref>) -> Self {
+        Self {
+            southwest: Sweref {
+                east: pts.iter().map(|p| p.east).fold(0./0., f64::min),
+                north: pts.iter().map(|p| p.north).fold(0./0., f64::min),
+            },
+            northeast: Sweref {
+                east: pts.iter().map(|p| p.east).fold(0./0., f64::max),
+                north: pts.iter().map(|p| p.north).fold(0./0., f64::max),
+            }
+        }
+    }
+
     pub fn create(xmin: f64, ymin: f64, xmax: f64, ymax: f64) -> Self {
         Self {
             southwest: Sweref { east: xmin, north: ymin, },
@@ -15,8 +28,8 @@ impl Rectangle {
         }
     }
 
-    fn northwest(&self) -> Sweref { Sweref { north: self.northeast.north, east: self.southwest.east } }
-    fn southeast(&self) -> Sweref { Sweref { north: self.southwest.north, east: self.northeast.east } }
+    pub fn northwest(&self) -> Sweref { Sweref { north: self.northeast.north, east: self.southwest.east } }
+    pub fn southeast(&self) -> Sweref { Sweref { north: self.southwest.north, east: self.northeast.east } }
 
     pub fn middle(&self) -> Sweref { 
         Sweref {
