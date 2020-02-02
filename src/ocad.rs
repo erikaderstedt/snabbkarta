@@ -356,27 +356,11 @@ pub fn create(path: &PathBuf, bounding_box: &geometry::Rectangle, angle: f64, qu
         file.seek(SeekFrom::End(0)).expect("Unable to seek back to end of file.");
     }
 
-    header.objectindex = ftell(&mut file);
-
-    // BEGIN object index
-    fn begin_object_index(file: &mut fs::File) -> ObjectIndexBlock { 
-        let o = ObjectIndexBlock { nextindexblock: 0, indices: [ObjectIndex { 
-            rc: LRect { lower_left: TDPoly { x: 0, y: 0 }, upper_right: TDPoly { x: 0, y: 0 } },
-            position: 0, length: 0, symbol: 0, object_type: 0, encrypted_mose: 0, status: 0, viewtype: 0, color: 0, reserved1: 0, imported_layer: 0, reserved2: 0 }; 256] };
-        write_instance(&o, file).expect("Unable to write object index instance.");
-        o
-    }
-
-    fn end_object_index(position: u32, object_index: &mut ObjectIndexBlock, file: &mut fs::File) -> u32 {
-        object_index.nextindexblock = ftell(file);
-        file.seek(SeekFrom::Start(position.into())).expect("Unable to seek to object index.");
-        write_instance(object_index, file).expect("Unable to write object index instance.");
-        file.seek(SeekFrom::End(0)).expect("Unable to seek back to end of file.").try_into().expect("Value too large")
-    }
-    
-    let mut start_pos = header.objectindex;
-    let mut object_index = begin_object_index(&mut file);
+    let mut object_index = ObjectIndexBlock { nextindexblock: 0, indices: [ObjectIndex { 
+        rc: LRect { lower_left: TDPoly { x: 0, y: 0 }, upper_right: TDPoly { x: 0, y: 0 } },
+        position: 0, length: 0, symbol: 0, object_type: 0, encrypted_mose: 0, status: 0, viewtype: 0, color: 0, reserved1: 0, imported_layer: 0, reserved2: 0 }; 256] };
     let mut current_index = 0;
+    let mut object_indices: Vec<ObjectIndexBlock> = Vec::new();
 
     loop {
         let object = queue.recv().expect("Unable to receive message on OCAD thread.");
@@ -384,6 +368,7 @@ pub fn create(path: &PathBuf, bounding_box: &geometry::Rectangle, angle: f64, qu
 
         let p = object.polys(angle, &middle);
 
+        // Create Element, and fill out object index
         let element = Element {
             symbol_number: object.symbol_number,
             object_type: object.object_type.ocad_object_type(),
@@ -402,12 +387,6 @@ pub fn create(path: &PathBuf, bounding_box: &geometry::Rectangle, angle: f64, qu
             _reserved0: 0u8, _reserved1: 0u8,
         };
 
-        let position = ftell(&mut file) as u32;
-
-        write_instance(&element, &mut file).expect("Unable to write OCAD element.");
-        write_instances(&p, &mut file).expect("Unable to write TDPoly vector.");
-
-        // Create Element, and fill out object index
         object_index.indices[current_index] = ObjectIndex {
             rc: LRect { 
                 lower_left: TDPoly { 
@@ -419,7 +398,7 @@ pub fn create(path: &PathBuf, bounding_box: &geometry::Rectangle, angle: f64, qu
                     y: (p.iter().map(|j| j.y).max().unwrap() >> 8) << 8,
                 },
             },
-            position: position,
+            position: ftell(&mut file) as u32,
             length: (mem::size_of::<ObjectIndex>() + (mem::size_of::<TDPoly>()) * p.len()) as u32,
             symbol: element.symbol_number,
             object_type: element.object_type,
@@ -430,16 +409,28 @@ pub fn create(path: &PathBuf, bounding_box: &geometry::Rectangle, angle: f64, qu
             reserved1: 0u16, reserved2: 0u16, imported_layer: 0u16,
         };
 
+        write_instance(&element, &mut file).expect("Unable to write OCAD element.");
+        write_instances(&p, &mut file).expect("Unable to write TDPoly vector.");
+
         if current_index == 255 {
-            start_pos = end_object_index(start_pos, &mut object_index, &mut file);
-            object_index = begin_object_index(&mut file);
+            object_indices.push(object_index);
+            object_index = ObjectIndexBlock { nextindexblock: 0, indices: [ObjectIndex { 
+                rc: LRect { lower_left: TDPoly { x: 0, y: 0 }, upper_right: TDPoly { x: 0, y: 0 } },
+                position: 0, length: 0, symbol: 0, object_type: 0, encrypted_mose: 0, status: 0, viewtype: 0, color: 0, reserved1: 0, imported_layer: 0, reserved2: 0 }; 256] };
             current_index = 0
         } else {
             current_index = current_index+1;
         }
     }
 
-    end_object_index(start_pos, &mut object_index, &mut file);
+    if current_index > 0 { object_indices.push(object_index); }
+
+    header.objectindex = ftell(&mut file) as u32;
+    for i in 0..(object_indices.len()-1) {
+        object_indices[i].nextindexblock = header.objectindex + (mem::size_of::<ObjectIndexBlock>()*(i+1)) as u32;
+    }
+
+    write_instances(&object_indices, &mut file).expect("Unable to write object indices.");
 
     file.seek(SeekFrom::Start(0)).expect("Unable to seek back to beginning of file.");
     write_instance(&header, &mut file).expect("Unable to write OCAD header.");
