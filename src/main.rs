@@ -39,7 +39,7 @@ fn main() {
     let module = "MAIN".green();
 
     let mut opts = Options::new();
-    opts.optflag("v", "verbose", "show additional information while running");
+    opts.optflag("q", "quiet", "hide additional information while running");
     opts.optflag("s", "shapefiles", "path to a folder containing Lantmäteriet shapefiles.");
     opts.optflag("h", "help", "show this help menu");
     let matches = match opts.parse(&args[1..]) {
@@ -50,7 +50,7 @@ fn main() {
         print_usage(&program, opts);
         return;
     }
-    let verbose = matches.opt_present("v");
+    let verbose = !matches.opt_present("q");
     if matches.free.is_empty() {
         print_usage(&program, opts);
         return;
@@ -59,7 +59,8 @@ fn main() {
     let shp_path = matches.opt_str("s");
 
     let appname = match verbose { false => "Snabbkarta", true =>
-r#"   _____             __    __    __              __       
+r#"
+   _____             __    __    __              __       
   / ___/____  ____ _/ /_  / /_  / /______ ______/ /_____ _
   \__ \/ __ \/ __ `/ __ \/ __ \/ //_/ __ `/ ___/ __/ __ `/
  ___/ / / / / /_/ / /_/ / /_/ / ,< / /_/ / /  / /_/ /_/ / 
