@@ -1,12 +1,12 @@
 extern crate osm_xml as osm;
-extern crate reqwest;
+extern crate minreq;
 extern crate colored;
 
 use std::sync::mpsc::Sender;
 use super::sweref_to_wgs84::{Wgs84,Sweref};
 use std::fs::{File};
+use std::io::Write;
 use colored::*;
-use std::io;
 use osm::Node;
 use super::ocad::{self, GraphSymbol};
 use super::geometry;
@@ -44,10 +44,9 @@ pub fn load_osm(southwest: &Wgs84, northeast: &Wgs84, file: &Sender<ocad::Object
             southwest.latitude, southwest.longitude,
             northeast.latitude, northeast.longitude);
 
-            let client  = reqwest::blocking::Client::new();
-            let mut res = match client.post("https://lz4.overpass-api.de/api/interpreter")
-                    .body(query)
-                    .send() {
+            let mut res = match minreq::post("https://lz4.overpass-api.de/api/interpreter")
+                .with_body(query)
+                .send() {
                 Ok(r) => r,
                 Err(e) => {
                     println!("[{}] OSM fetch error: {}", &module, e);
@@ -56,7 +55,7 @@ pub fn load_osm(southwest: &Wgs84, northeast: &Wgs84, file: &Sender<ocad::Object
             };
             { 
                 let mut f = File::create(&cache_path).expect("Unable to create OSM cache path.");
-                io::copy(&mut res, &mut f).expect("Unable to write to OSM cache.");
+                f.write(res.as_bytes());
             };
             File::open(&cache_path).expect("Unable to open the cache I just wrote!")
         }
