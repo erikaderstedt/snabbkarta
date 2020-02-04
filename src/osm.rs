@@ -44,7 +44,7 @@ pub fn load_osm(southwest: &Wgs84, northeast: &Wgs84, file: &Sender<ocad::Object
             southwest.latitude, southwest.longitude,
             northeast.latitude, northeast.longitude);
 
-            let mut res = match minreq::post("https://lz4.overpass-api.de/api/interpreter")
+            let res = match minreq::post("https://lz4.overpass-api.de/api/interpreter")
                 .with_body(query)
                 .send() {
                 Ok(r) => r,
@@ -53,10 +53,8 @@ pub fn load_osm(southwest: &Wgs84, northeast: &Wgs84, file: &Sender<ocad::Object
                     return
                 },
             };
-            { 
-                let mut f = File::create(&cache_path).expect("Unable to create OSM cache path.");
-                f.write(res.as_bytes());
-            };
+            let mut f = File::create(&cache_path).expect("Unable to create OSM cache path.");
+            f.write(res.as_bytes()).expect("Unable to write to OSM cache.");
             File::open(&cache_path).expect("Unable to open the cache I just wrote!")
         }
     };

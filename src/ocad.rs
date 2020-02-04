@@ -476,6 +476,18 @@ struct SymbolBlock {
 }
 
 #[repr(C,packed)]
+struct StringIndexBlock {
+    nextindexblock: u32,
+    indices: [StringIndex;256],
+}
+
+#[repr(C,packed)]
+struct ObjectIndexBlock {
+    nextindexblock: u32,
+    indices: [ObjectIndex;256],
+}
+
+#[repr(C,packed)]
 #[derive(Copy,Clone)]
 struct StringIndex {
     position: u32,
@@ -484,17 +496,11 @@ struct StringIndex {
     objectindex: u32,
 }
 
-#[repr(C,packed)]
-struct StringIndexBlock {
-    nextindexblock: u32,
-    indices: [StringIndex;256],
-}
-
 #[derive(Copy,Clone)]
 #[repr(C,packed)]
 struct ObjectIndex {
     rc: LRect,
-    position: u32,
+    position: u32, // of Element structure.
     length: u32,
     symbol: i32,
     object_type: u8,
@@ -505,12 +511,6 @@ struct ObjectIndex {
     reserved1: u16,
     imported_layer: u16,
     reserved2: u16,
-}
-
-#[repr(C,packed)]
-struct ObjectIndexBlock {
-    nextindexblock: u32,
-    indices: [ObjectIndex;256],
 }
 
 #[repr(C,packed)]
