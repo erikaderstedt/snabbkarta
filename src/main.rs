@@ -17,6 +17,7 @@ mod osm;
 mod ocad;
 mod geometry;
 mod shapefiles;
+mod lantmateriet;
 mod ffi_helpers;
 mod lakes;
 mod dtm;
@@ -40,7 +41,7 @@ fn main() {
 
     let mut opts = Options::new();
     opts.optflag("q", "quiet", "hide additional information while running");
-    opts.optflag("s", "shapefiles", "path to a folder containing Lantmäteriet shapefiles.");
+    opts.optopt("s", "", "shapefiles", "path to a folder containing Lantmäteriet shapefiles.");
     opts.optflag("h", "help", "show this help menu");
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => { m }
@@ -129,7 +130,7 @@ r#"
     let preexisting_map_thread = thread::spawn(move || {
         match shp_path {
             None => { osm::load_osm(&southwest_corner, &northeast_corner, &tx_preexisting, verbose); },
-            Some(p) => { shapefiles::load_shapefiles(&bounding_box, &Path::new(&p), &tx_preexisting, verbose); },
+            Some(p) => { shapefiles::load_shapefiles(&bounding_box, &Path::new(&p), &lantmateriet::LantmaterietShapes {}, &tx_preexisting, verbose); },
         }
     });
 

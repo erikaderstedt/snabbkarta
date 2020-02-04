@@ -9,34 +9,9 @@ use super::sweref_to_wgs84::Sweref;
 use super::geometry;
 use colored::*;
 
-// https://www.lantmateriet.se/globalassets/kartor-och-geografisk-information/kartor/fastshmi.pdf
-
-enum LantmaterietShapeSymbol {
-    KL, // Linjeskikt med kraftledningar
-    VL, // Linjeskikt med vägar
-    VO, // Linjeskikt med övriga vägar
-    HL, // Linjeskikt med hydrografi
-    ML, // Linjeskikt med markdata
-
-    MY, // Ytskikt med heltäckande markdata
-    MB, // Ytskikt med bebyggelse
-    MS, // Ytskikt med sankmark
-}
-
-impl LantmaterietShapeSymbol {
-    fn from_str(s: &str) -> Option<Self> {
-        match &s[0..2] {
-            "vl" => Some(Self::VL),
-            "kl" => Some(Self::KL),
-            "vo" => Some(Self::VO),
-            "hl" => Some(Self::HL),
-            "ml" => Some(Self::ML),
-            "my" => Some(Self::MY),
-            "mb" => Some(Self::MB),
-            "ms" => Some(Self::MS),
-            _ => None,
-        }
-    }
+pub trait SurveyAuthorityConfiguration {
+    fn supports_file(&self, s:&str) -> bool;
+    fn symbol_from_detaljtyp(&self, s: &str, detaljtyp: &str) -> Option<ocad::GraphSymbol>;
 }
 
 #[repr(C,packed)]
@@ -123,8 +98,9 @@ enum ShapeType {
     Polyline,
 }
 
-pub fn load_shapefiles(bounding_box: &geometry::Rectangle, 
+pub fn load_shapefiles<T: SurveyAuthorityConfiguration>(bounding_box: &geometry::Rectangle, 
     folder: &Path,
+    authority: &T,
     _file: &Sender<ocad::Object>, verbose: bool) {
         
     let module = "SHP".yellow();
@@ -133,32 +109,39 @@ pub fn load_shapefiles(bounding_box: &geometry::Rectangle,
         .expect("Unable to open shapefile folder!")
         .filter_map(|x| {
         let path = x.expect("Unable to read shapefile path.").path();
-        match !path.is_dir() && path.ends_with(".shp") {
-            true => Some((path.clone(), path.with_extension("dbf"))),
-            false => None,
+        if !path.is_dir() && path.to_str().unwrap().ends_with("shp") {
+            Some((path.clone(), path.with_extension("dbf")))
+        } else {
+            None
         }
     });
-
 
     let mut records = 0;
     for (shp, dbf) in input_files {
         let p = &dbf;
         let mut reader = dbase::Reader::from_path(p).expect("Unable to open dBase-III file!");
-        if let Some(_symbol) = LantmaterietShapeSymbol::from_str(p.to_str().expect("Path is not valid UTF-8!")) {
+        let base_filename = p.file_stem().unwrap().to_str().expect("Path is not valid UTF-8!");
+        println!("Reading {}", base_filename);
+        if authority.supports_file(base_filename) {
             let shp_iter = Shapefile::new(&shp).expect("Unsupported shape type in shapefile");
             let _shape_type = shp_iter.shape_type;
             // Shape files and dbf files.
             // These are read in conjunction. 
             for (dbf_record, (_point_lists, item_bbox)) in reader.iter_records().zip(shp_iter) {
+                // println!("{:?}", item_bbox);
                 if !bounding_box.intersects(&item_bbox) { continue; }
 
                 let r = dbf_record.expect("Unable to read DBF record.");
-                let _v = match r.get("DETALJTYP").expect("No DETALJTYP field in record.") { 
-                    dbase::FieldValue::Character(s) => s.as_ref(),
+                let detaljtyp = match r.get("DETALJTYP").expect("No DETALJTYP field in record.") { 
+                    dbase::FieldValue::Character(s) => s.as_ref().unwrap(),
                     _ => panic!("Invalid field value for DETALJTYP field."),
                 };
 
-                records = records + 1;
+            
+                if let Some(symbol) = authority.symbol_from_detaljtyp(base_filename, detaljtyp) {
+                    records = records + 1;
+                    println!("{} {:?} {:?}", base_filename, detaljtyp, symbol);
+                }
 
                 // let 
 
