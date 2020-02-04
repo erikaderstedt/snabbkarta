@@ -15,9 +15,6 @@ impl Sweref {
         let lat = position.latitude.to_radians();
         let lon = position.longitude.to_radians();
 
-        //
-        // The compiler should be able to optimize away all these calculations.
-        //
         let a: f64 = 6378137.0;
         let f: f64 = 1.0/298.257222101;
         let e2: f64 = f*(2.0-f);
@@ -41,9 +38,6 @@ impl Sweref {
     
         let d = lon - long_av;
         
-        //
-        // Here are the real calculations.
-        //
         let s = f64::sin(lat);
         let lat1 = lat - s*f64::cos(lat)*(A + B*s.powi(2) + C*s.powi(4) + D*s.powi(6));
         let es = f64::atan(f64::tan(lat1)/f64::cos(d));
