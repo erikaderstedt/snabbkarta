@@ -1,7 +1,6 @@
-extern crate dbase;
-
 use super::shapefiles::SurveyAuthorityConfiguration;
 use super::ocad::GraphSymbol::{self,Stroke,Fill};
+use dbase;
 
 // https://www.lantmateriet.se/globalassets/kartor-och-geografisk-information/kartor/fastshmi.pdf
 

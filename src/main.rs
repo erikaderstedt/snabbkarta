@@ -1,6 +1,3 @@
-extern crate getopts;
-extern crate colored;
-
 use getopts::Options;
 use std::env;
 use std::path::Path;

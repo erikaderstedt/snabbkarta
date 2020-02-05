@@ -1,12 +1,10 @@
-extern crate osm_xml as osm;
-extern crate minreq;
-extern crate colored;
-
+use minreq;
 use std::sync::mpsc::Sender;
 use super::sweref_to_wgs84::{Wgs84,Sweref};
 use std::fs::{File};
 use std::io::Write;
 use colored::*;
+use osm_xml as osm;
 use osm::Node;
 use super::ocad::{self, GraphSymbol};
 use super::geometry;

@@ -1,5 +1,3 @@
-extern crate dbase;
-
 use super::ocad;
 use super::ffi_helpers::{read_instance,read_instances};
 use std::fs;
@@ -8,6 +6,7 @@ use std::sync::mpsc::Sender;
 use super::sweref_to_wgs84::Sweref;
 use super::geometry;
 use colored::*;
+use dbase;
 
 pub trait SurveyAuthorityConfiguration {
     fn supports_file(&self, base_filename: &str) -> bool;

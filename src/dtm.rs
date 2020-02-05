@@ -1,5 +1,3 @@
-extern crate delaunator;
-
 use super::las::PointDataRecord;
 use delaunator::{Point,triangulate,EMPTY};
 

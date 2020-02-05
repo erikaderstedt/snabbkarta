@@ -1,5 +1,3 @@
-extern crate delaunator;
-
 use delaunator::EMPTY;
 use colored::*;
 use super::ocad;
