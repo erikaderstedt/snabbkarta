@@ -155,5 +155,4 @@ impl DigitalTerrainModel {
             }
         }
     }
-
 }

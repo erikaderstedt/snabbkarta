@@ -56,8 +56,7 @@ fn main() {
 
     let shp_path = matches.opt_str("s");
 
-    let appname = match verbose { false => "Snabbkarta", true =>
-r#"
+    let appname = match verbose { false => "Snabbkarta", true => r#"
    _____             __    __    __              __       
   / ___/____  ____ _/ /_  / /_  / /______ ______/ /_____ _
   \__ \/ __ \/ __ `/ __ \/ __ \/ //_/ __ `/ ___/ __/ __ `/
@@ -154,5 +153,4 @@ r#"
 
     ocad_tx.send(ocad::Object::termination()).expect("Unable to tell OCAD thread to finish.");
     ocad_thread.join().expect("Unable to finish OCAD thread.");
-
 }

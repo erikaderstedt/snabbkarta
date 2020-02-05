@@ -10,7 +10,7 @@ use dbase;
 
 pub trait SurveyAuthorityConfiguration {
     fn supports_file(&self, base_filename: &str) -> bool;
-    fn symbol_for_record(&self, base_filename: &str, dbase_record: &dbase::Record) -> Option<ocad::GraphSymbol>;
+    fn symbols_for_record(&self, base_filename: &str, dbase_record: &dbase::Record) -> Vec<ocad::GraphSymbol>;
 }
 
 #[repr(C,packed)]
@@ -107,20 +107,20 @@ pub fn load_shapefiles<T: SurveyAuthorityConfiguration>(bounding_box: &geometry:
     let input_files = fs::read_dir(folder)
         .expect("Unable to open shapefile folder!")
         .filter_map(|x| {
-        let path = x.expect("Unable to read shapefile path.").path();
-        if !path.is_dir() && path.to_str().unwrap().ends_with("shp") {
-            Some((path.clone(), path.with_extension("dbf")))
-        } else {
-            None
-        }
-    });
+            let path = x.expect("Unable to read shapefile path.").path();
+            match path.file_stem() {
+                Some(s) if 
+                    !path.is_dir() && path.to_str().unwrap().ends_with("shp") &&
+                    authority.supports_file(s.to_str().expect("Bad path!")) => Some(path.clone()),
+                _ => None,
+            }
+        });
 
     let mut records = 0;
-    for (shp, dbf) in input_files {
-        let p = &dbf;
+    for shp in input_files {
+        let p = shp.with_extension("dbf");
         let mut reader = dbase::Reader::from_path(p).expect("Unable to open dBase-III file!");
-        let base_filename = p.file_stem().unwrap().to_str().expect("Path is not valid UTF-8!");
-        println!("Reading {}", base_filename);
+        let base_filename = shp.file_stem().unwrap().to_str().expect("Path is not valid UTF-8!");
         if authority.supports_file(base_filename) {
             let shp_iter = Shapefile::new(&shp).expect("Unsupported shape type in shapefile");
             let _shape_type = shp_iter.shape_type;
@@ -130,10 +130,8 @@ pub fn load_shapefiles<T: SurveyAuthorityConfiguration>(bounding_box: &geometry:
                 // println!("{:?}", item_bbox);
                 if !bounding_box.intersects(&item_bbox) { continue; }
 
-                if let Some(symbol) = authority.symbol_for_record(base_filename, &dbf_record.expect("Unable to read DBF record.")) {
-                    ocad::post_objects(point_lists, &vec![symbol], file, bounding_box);
-                    records = records + 1;
-                }
+                let symbols = authority.symbols_for_record(base_filename, &dbf_record.expect("Unable to read DBF record."));
+                ocad::post_objects(point_lists, &symbols, file, bounding_box);
             }
         } 
     }
