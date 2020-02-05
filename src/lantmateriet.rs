@@ -1,3 +1,5 @@
+extern crate dbase;
+
 use super::shapefiles::SurveyAuthorityConfiguration;
 use super::ocad::GraphSymbol::{self,Stroke,Fill};
 
@@ -7,15 +9,20 @@ pub struct LantmaterietShapes { }
 
 impl SurveyAuthorityConfiguration for LantmaterietShapes {
 
-    fn supports_file(&self, s:&str) -> bool {
-        match &s[0..2] {
+    fn supports_file(&self, base_filename: &str) -> bool {
+        match &base_filename[0..2] {
             "vl" | "kl" | "bl" | "hl" | "oh" | "vo" | "ml" | "ma" | "mb" | "my" | "ms" => true,
             _ => false,
         }
     }
 
-    fn symbol_from_detaljtyp(&self, s: &str, detaljtyp: &str) -> Option<GraphSymbol> {
-        match &s[0..2] {
+    fn symbol_for_record(&self, base_filename: &str, dbase_record: &dbase::Record) -> Option<GraphSymbol> {
+        let detaljtyp = match dbase_record.get("DETALJTYP").expect("No DETALJTYP field in record.") { 
+            dbase::FieldValue::Character(s) => s.as_ref().unwrap(),
+            _ => panic!("Invalid field value for DETALJTYP field."),
+        };
+        
+        match &base_filename[0..2] {
             // Linjeskikt med vägar
             "vl" => match &detaljtyp[3..5] {
                 "A1" | "A2" | "A3" | "AS" | "BN" | "KV" | "MO" => Some(Stroke(502000,false)),
@@ -45,19 +52,19 @@ impl SurveyAuthorityConfiguration for LantmaterietShapes {
                 _ => None, },
 
             // Linjeskikt med markdata
-            "ml" => match detaljtyp {
+            "ml" => match &detaljtyp[..] {
                 "ODLMARK.B" => Some(Stroke(415000,false)),
                 "BEBOMR.B" => Some(Stroke(521001,false)),
                 _ => None, },
 
             // Ytskikt för odlad mark
-            "ma" => match detaljtyp {
+            "ma" => match &detaljtyp[..] {
                 "ODLÅKER" => Some(Fill(412000)),
                 "ODLFRUKT" => Some(Fill(413000)),
                 _ => None, },    
 
             // Ytskikt med heltäckande markdata
-            "my" => match detaljtyp {
+            "my" => match &detaljtyp[..] {
                 "ODLÅKER" => Some(Fill(412000)),
                 "ODLFRUKT" => Some(Fill(413000)),
                 "ÖPMARK" => Some(Fill(401000)),
@@ -65,13 +72,13 @@ impl SurveyAuthorityConfiguration for LantmaterietShapes {
                 _ => None, },
 
             // Ytskikt med bebyggelse
-            "mb" => match detaljtyp {
+            "mb" => match &detaljtyp[..] {
                 "ÖPTORG" => Some(Fill(501000)),
                 _ => Some(Fill(520000)),
             },
     
             // Ytskikt med sankmark  
-            "ms" => match detaljtyp {
+            "ms" => match &detaljtyp[..] {
                 "SANK" => Some(Fill(308000)),
                 _ => Some(Fill(307000)),
             },

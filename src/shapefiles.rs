@@ -10,8 +10,8 @@ use super::geometry;
 use colored::*;
 
 pub trait SurveyAuthorityConfiguration {
-    fn supports_file(&self, s:&str) -> bool;
-    fn symbol_from_detaljtyp(&self, s: &str, detaljtyp: &str) -> Option<ocad::GraphSymbol>;
+    fn supports_file(&self, base_filename: &str) -> bool;
+    fn symbol_for_record(&self, base_filename: &str, dbase_record: &dbase::Record) -> Option<ocad::GraphSymbol>;
 }
 
 #[repr(C,packed)]
@@ -101,7 +101,7 @@ enum ShapeType {
 pub fn load_shapefiles<T: SurveyAuthorityConfiguration>(bounding_box: &geometry::Rectangle, 
     folder: &Path,
     authority: &T,
-    _file: &Sender<ocad::Object>, verbose: bool) {
+    file: &Sender<ocad::Object>, verbose: bool) {
         
     let module = "SHP".yellow();
 
@@ -127,36 +127,14 @@ pub fn load_shapefiles<T: SurveyAuthorityConfiguration>(bounding_box: &geometry:
             let _shape_type = shp_iter.shape_type;
             // Shape files and dbf files.
             // These are read in conjunction. 
-            for (dbf_record, (_point_lists, item_bbox)) in reader.iter_records().zip(shp_iter) {
+            for (dbf_record, (point_lists, item_bbox)) in reader.iter_records().zip(shp_iter) {
                 // println!("{:?}", item_bbox);
                 if !bounding_box.intersects(&item_bbox) { continue; }
 
-                let r = dbf_record.expect("Unable to read DBF record.");
-                let detaljtyp = match r.get("DETALJTYP").expect("No DETALJTYP field in record.") { 
-                    dbase::FieldValue::Character(s) => s.as_ref().unwrap(),
-                    _ => panic!("Invalid field value for DETALJTYP field."),
-                };
-
-            
-                if let Some(symbol) = authority.symbol_from_detaljtyp(base_filename, detaljtyp) {
+                if let Some(symbol) = authority.symbol_for_record(base_filename, &dbf_record.expect("Unable to read DBF record.")) {
+                    ocad::post_objects(point_lists, &vec![symbol], file, bounding_box);
                     records = records + 1;
-                    println!("{} {:?} {:?}", base_filename, detaljtyp, symbol);
                 }
-
-                // let 
-
-                // // For polygons, several parts make up a block. Each clockwise part makes up the start of a polygon. So, only begin a new ocad object when 
-
-                // match symbol {
-                //     LantmaterietShapeSymbol::MS |   LantmaterietShapeSymbol::MB | LantmaterietShapeSymbol::MY => {
-
-                //     }
-                //     LantmaterietShapeSymbol::HL | LantmaterietShapeSymbol::KL | 
-                    
-                //     polyline(symbol, &record),
-                //     _ => polygon(symbol, &record),
-                // }
-    
             }
         } 
     }
