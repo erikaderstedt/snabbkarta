@@ -54,7 +54,6 @@ pub fn handler( records: &Vec<PointDataRecord>, record_to_point_3d: &dyn Fn(&Poi
 
     let mut lake_index: usize = 1;
     let mut actual_lakes = 0;
-    let water_edge_symbol = ocad::GraphSymbol::Stroke(301001, false);
 
     for i in 0..water_points.len() {
         triangle = triangle_indices_for_water_points[i];

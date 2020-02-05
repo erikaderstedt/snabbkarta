@@ -50,10 +50,11 @@ impl Point3D {
 
 pub struct DigitalTerrainModel {
     pub points: Vec<super::Point3D>,
-    pub triangles: Vec<usize>,
+    pub vertices: Vec<usize>,
     pub halfedges: Vec<Halfedge>,
     pub num_triangles: usize,
     pub normals: Vec<[f64;3]>,
+    pub areas: Vec<f64>,
     pub exterior: Vec<bool>,
 }
 
@@ -64,8 +65,8 @@ impl DigitalTerrainModel {
     }
 
     pub fn length_of_halfedge(&self, h: Halfedge) -> f64 {
-        let p0 = self.points[self.triangles[h]];
-        let p1 = self.points[self.triangles[h.next()]];
+        let p0 = self.points[self.vertices[h]];
+        let p1 = self.points[self.vertices[h.next()]];
         p0.distance_2d_to(&p1)
     }
 
@@ -74,7 +75,6 @@ impl DigitalTerrainModel {
         let ground_points: Vec<Point3D> = records.iter()
             .filter(|record| record.classification == 2)
             .map(record_to_point_3d)
-//            .inspect(|p| println!("{:?}", p) )
             .collect();
 
         let gp_delaunator: Vec<Point> = ground_points.iter().map(|p| Point { x: p.x, y: p.y, }).collect();
@@ -83,53 +83,60 @@ impl DigitalTerrainModel {
         let num_triangles = triangulation.triangles.len() / 3;
         const MARGIN: f64 = 5.0;
 
-        let normals = triangulation.triangles[..].chunks(3).map(|i| {
-            let p0 = &ground_points[i[0]];
-            let p1 = &ground_points[i[1]];
-            let p2 = &ground_points[i[2]];
-            let v = Point3D { x: p1.x-p0.x, y: p1.y-p0.y, z: p1.z-p0.z };
-            let u = Point3D { x: p2.x-p0.x, y: p2.y-p0.y, z: p2.z-p0.z };
-            let nx = u.y*v.z - u.z*v.y;
-            let ny = u.z*v.x - u.x*v.z;
-            let nz = u.x*v.y - u.y*v.x;
-            let l = f64::sqrt(nx*nx + ny*ny + nz*nz);
-//            [i[0] as f64, i[1] as f64, i[2] as f64]
-            [nx/l, ny/l, nz/l]
-        }).collect();
-
         let max_x = ground_points.iter().map(|p| p.x).fold(0./0., f64::max) - MARGIN;
         let min_x = ground_points.iter().map(|p| p.x).fold(0./0., f64::min) + MARGIN;
         let max_y = ground_points.iter().map(|p| p.y).fold(0./0., f64::max) - MARGIN;
         let min_y = ground_points.iter().map(|p| p.y).fold(0./0., f64::min) + MARGIN;
 
-        let exterior = (0..num_triangles).map(|i| {
-            let p0 = &ground_points[triangulation.triangles[i*3]];
-            let p1 = &ground_points[triangulation.triangles[i*3+1]];
-            let p2 = &ground_points[triangulation.triangles[i*3+2]];
-            p0.x < min_x || p1.x < min_x || p2.x < min_x ||
-            p0.x > max_x || p1.x > max_x || p2.x > max_x ||
-            p0.y < min_y || p1.y < min_y || p2.y < min_y ||
-            p0.y > max_y || p1.y > max_y || p2.y > max_y ||
-            triangulation.halfedges[i*3] == EMPTY ||
-            triangulation.halfedges[i*3+1] == EMPTY ||
-            triangulation.halfedges[i*3+2] == EMPTY
-        }).collect();
+        let normals = triangulation.triangles
+            .chunks(3)
+            .map(|i| [&ground_points[i[0]], &ground_points[i[1]], &ground_points[i[2]]])
+            .map(|p| {
+                let v = Point3D { x: p[1].x-p[0].x, y: p[1].y-p[0].y, z: p[1].z-p[0].z };
+                let u = Point3D { x: p[2].x-p[0].x, y: p[2].y-p[0].y, z: p[2].z-p[0].z };
+                let nx = u.y*v.z - u.z*v.y;
+                let ny = u.z*v.x - u.x*v.z;
+                let nz = u.x*v.y - u.y*v.x;
+                let l = f64::sqrt(nx*nx + ny*ny + nz*nz);
+                [nx/l, ny/l, nz/l]
+            }).collect();
+        
+        let exteriors = triangulation.triangles
+            .chunks(3)
+            .map(|i| [&ground_points[i[0]], &ground_points[i[1]], &ground_points[i[2]]])
+            .enumerate()
+            .map(|(i,p)| {
+                p[0].x < min_x || p[1].x < min_x || p[2].x < min_x ||
+                p[0].x > max_x || p[1].x > max_x || p[2].x > max_x ||
+                p[0].y < min_y || p[1].y < min_y || p[2].y < min_y ||
+                p[0].y > max_y || p[1].y > max_y || p[2].y > max_y ||
+                triangulation.halfedges[i*3] == EMPTY ||
+                triangulation.halfedges[i*3+1] == EMPTY ||
+                triangulation.halfedges[i*3+2] == EMPTY
+            }).collect();
+
+        let areas = triangulation.triangles
+            .chunks(3)
+            .map(|i| [&ground_points[i[0]], &ground_points[i[1]], &ground_points[i[2]]])
+            .map(|p| {
+                f64::abs((p[0].x * (p[1].y - p[2].y) +
+                p[1].x * (p[2].y - p[0].y) +
+                p[2].x * (p[0].y - p[1].y)) * 0.5)
+            }).collect();
         
         DigitalTerrainModel {
             points: ground_points,
-            triangles: triangulation.triangles.clone(),
+            vertices: triangulation.triangles.clone(),
             halfedges: triangulation.halfedges.clone(),
             num_triangles: num_triangles,
-            normals: normals,
-            exterior: exterior,
+            normals: normals, exterior: exteriors, areas: areas,
         }
-
     }
 
     fn next_triangle_toward_point(&self, point: &Point3D, triangle: usize) -> Option<usize> {
         for edge in 0..3 {
-            let p0 = &self.points[self.triangles[triangle*3 + edge]];
-            let p1 = &self.points[self.triangles[triangle*3 + ((edge+1)%3)]];
+            let p0 = &self.points[self.vertices[triangle*3 + edge]];
+            let p1 = &self.points[self.vertices[triangle*3 + ((edge+1)%3)]];
             if point.to_the_left_of(p0,p1) {
                 let r = self.halfedges[triangle*3 + edge];
                 return match r {
@@ -150,4 +157,5 @@ impl DigitalTerrainModel {
             }
         }
     }
+
 }

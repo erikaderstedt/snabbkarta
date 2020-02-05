@@ -40,7 +40,7 @@ impl<'a> Boundary<'a> {
     pub fn extract_vertices(&self) -> Vec<Vec<Sweref>> {
         let mut pts: Vec<Vec<Sweref>> = Vec::new();
         let halfedge_to_sweref = |h: &usize| -> Sweref {
-            let p = self.dtm.points[self.dtm.triangles[*h]];
+            let p = self.dtm.points[self.dtm.vertices[*h]];
             Sweref { east: p.x, north: p.y, }
         };
         pts.push(self.halfedges.iter().map(halfedge_to_sweref).collect());
@@ -54,7 +54,7 @@ impl<'a> Boundary<'a> {
         let mut segs: Vec<Vec<Sweref>> = Vec::new();
         let mut cur: Vec<Sweref> = Vec::new();
         let halfedge_to_sweref = |h: &usize| -> Sweref {
-            let p = self.dtm.points[self.dtm.triangles[*h]];
+            let p = self.dtm.points[self.dtm.vertices[*h]];
             Sweref { east: p.x, north: p.y, }
         };
         for h in halfedges.iter() {
@@ -136,7 +136,7 @@ impl<'a> Boundary<'a> {
         let vertices: Vec<&Point3D> = halfedges.iter()
             .cycle()
             .take(halfedges.len()+1)
-            .map(|h| &dtm.points[dtm.triangles[*h]])
+            .map(|h| &dtm.points[dtm.vertices[*h]])
             .collect();
 
         vertices[..]
