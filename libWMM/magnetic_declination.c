@@ -29,7 +29,7 @@ double todays_magnetic_declination(double latitude, double longitude, double hei
     /* Memory allocation */
 
     FILE *MODELFILE = fmemopen((void *restrict)gWMMData, gWMMSize, "rb");
-    if (!MAG_robustReadMagModels(MODELFILE, &MagneticModels)) {
+    if (!MAG_robustReadMagModels(MODELFILE, &MagneticModels,1)) {
         fprintf(stderr, "Could not read magnetic model.\n");
         exit(1);
     }
@@ -47,9 +47,9 @@ double todays_magnetic_declination(double latitude, double longitude, double hei
 
     Geoid.UseGeoid = 1;
     CoordGeodetic.HeightAboveGeoid = height_above_sea_level;
-    MAG_ConvertGeoidToEllipsoidHeight(&CoordGeodetic, &Geoid);
     CoordGeodetic.lambda = longitude;
     CoordGeodetic.phi = latitude;
+    MAG_ConvertGeoidToEllipsoidHeight(&CoordGeodetic, &Geoid);
     
     const time_t t_epoch = time(NULL);
     struct tm *t = gmtime(&t_epoch);

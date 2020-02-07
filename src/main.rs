@@ -95,7 +95,7 @@ fn main() {
     let bottom_of_map = Sweref::from_wgs84(
         &Wgs84 { latitude: middle_of_map.latitude - 0.003, longitude: middle_of_map.longitude});
     let meridian_convergence: f64 = 90.0f64 - f64::atan2(top_of_map.north-bottom_of_map.north, top_of_map.east - bottom_of_map.east)*180f64/PI;
-    let magnetic_declination: f64 = wmm::get_todays_magnetic_declination(&middle_of_map, height_over_sea_level);
+    let magnetic_declination: f64 = wmm::get_todays_magnetic_declination(&middle_of_map, height_over_sea_level*0.001);
     let northeast_corner = Wgs84::from_sweref(&bounding_box.northeast);
     let southwest_corner = Wgs84::from_sweref(&bounding_box.southwest);
 
