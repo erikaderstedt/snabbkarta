@@ -3,7 +3,7 @@ use colored::*;
 use super::ocad;
 use std::sync::mpsc::Sender;
 use super::las::PointDataRecord;
-use super::dtm::{DigitalTerrainModel,Point3D,Halfedge};
+use super::dtm::{DigitalTerrainModel,Point3D,Halfedge, Z_NORMAL};
 use super::boundary::Boundary;
 
 const Z_NORMAL_REQUIREMENT: f64 = 0.9993f64;
@@ -13,7 +13,7 @@ const LAKE_INDEX_MASK: usize = 0x7fffffff;
 pub fn should_grow_lake(lake: &Boundary, halfedge: Halfedge) -> bool {
     let triangle = halfedge / 3;
     lake.indices_for_each_triangle[triangle] & LAKE_INDEX_MASK == 0 && // Not already claimed.triangle
-        (lake.dtm.normals[triangle][2] >= Z_NORMAL_REQUIREMENT ||
+        (lake.dtm.normals[triangle][Z_NORMAL] >= Z_NORMAL_REQUIREMENT ||
         (lake.dtm.length_of_halfedge(halfedge) > 5.0 && !lake.dtm.exterior[triangle]) || // TODO: also not exterior
         lake.indices_for_each_triangle[triangle] & TRIANGLE_CONTAINS_WATER_POINT > 0)
 }

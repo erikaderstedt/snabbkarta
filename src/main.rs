@@ -20,6 +20,7 @@ mod lakes;
 mod dtm;
 mod boundary;
 mod meridians;
+mod contours;
 
 use sweref_to_wgs84::{Sweref,Wgs84};
 use dtm::Point3D;
@@ -135,21 +136,29 @@ fn main() {
     let to_point_3d = move |record: &las::PointDataRecord| Point3D {
         x: ((record.x as f64) * x_scale_factor + x_offset),
         y: ((record.y as f64) * y_scale_factor + y_offset),
-        z: ((record.z as f64) * z_scale_factor + z_offset) - min_z,
+        z: ((record.z as f64) * z_scale_factor + z_offset),
     };
 
     let dtm = dtm::DigitalTerrainModel::create(&records, &to_point_3d);
     println!("[{}] DTM triangulation complete, {:?} triangles", &module, dtm.num_triangles);
 
+    let dtm_for_lakes = dtm.clone();
     let tx_lakes = ocad_tx.clone();
     let lake_thread = thread::Builder::new().name("lakes".into()).spawn(move || {
-        lakes::handler(&records, &to_point_3d, &dtm, tx_lakes);
+        lakes::handler(&records, &to_point_3d, &dtm_for_lakes, tx_lakes);
     }).expect("Unable to start lake thread.");
+
+    let tx_contours = ocad_tx.clone();
+    let contour_thread = thread::spawn(move || {
+        contours::handler(&dtm, min_z, max_z, tx_contours);
+    });
 
     meridians::add_meridians(&bounding_box, magnetic_declination+meridian_convergence, &ocad_tx, verbose);
 
     preexisting_map_thread.join().expect("Unable to finish pre-existing map thread.");
     lake_thread.join().expect("Unable to finish lake thread.");
+
+    contour_thread.join().expect("Unable to finish contour thread.");
 
     ocad_tx.send(ocad::Object::termination()).expect("Unable to tell OCAD thread to finish.");
     ocad_thread.join().expect("Unable to finish OCAD thread.");

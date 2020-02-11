@@ -1,5 +1,8 @@
 use super::las::PointDataRecord;
 use delaunator::{Point,triangulate,EMPTY};
+use std::f64;
+
+pub const Z_NORMAL: usize = 2;
 
 pub type Halfedge = usize;
 
@@ -23,7 +26,7 @@ impl TriangleWalk for Halfedge {
     }    
 }
 
-#[derive(Copy,Clone,Debug)]
+#[derive(Copy,Clone,Debug,PartialEq)]
 pub struct Point3D {
     pub x: f64,
     pub y: f64,
@@ -39,13 +42,14 @@ impl Point3D {
         vx*toselfy - vy*toselfx > 0f64
     }
 
-    fn distance_2d_to(&self, other: &Point3D) -> f64 {
+    pub fn distance_2d_to(&self, other: &Point3D) -> f64 {
         let dx = other.x - self.x;
         let dy = other.y - self.y;
         f64::sqrt(dx*dx + dy*dy)
     }
 }
 
+#[derive(Clone)]
 pub struct DigitalTerrainModel {
     pub points: Vec<super::Point3D>,
     pub vertices: Vec<usize>,
@@ -54,6 +58,7 @@ pub struct DigitalTerrainModel {
     pub normals: Vec<[f64;3]>,
     pub areas: Vec<f64>,
     pub exterior: Vec<bool>,
+    pub z_limits: Vec<(f64,f64)>,
 }
 
 impl DigitalTerrainModel {
@@ -121,13 +126,23 @@ impl DigitalTerrainModel {
                 p[1].x * (p[2].y - p[0].y) +
                 p[2].x * (p[0].y - p[1].y)) * 0.5)
             }).collect();
-        
+
+        let z_limits = triangulation.triangles
+            .chunks(3)
+            .map(|i| [&ground_points[i[0]], &ground_points[i[1]], &ground_points[i[2]]])
+            .map(|p| {
+                
+                let zs = [p[0].z, p[1].z, p[2].z];
+                (zs.iter().cloned().fold(0./0., f64::min), 
+                 zs.iter().cloned().fold(0./0., f64::max))
+            }).collect();
+
         DigitalTerrainModel {
             points: ground_points,
             vertices: triangulation.triangles.clone(),
             halfedges: triangulation.halfedges.clone(),
             num_triangles: num_triangles,
-            normals: normals, exterior: exteriors, areas: areas,
+            normals: normals, exterior: exteriors, areas: areas, z_limits: z_limits,
         }
     }
 
