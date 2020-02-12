@@ -132,6 +132,7 @@ fn main() {
     });
 
     let records: Vec<las::PointDataRecord> = matches.free.iter().map(|x| las::PointDataRecord::load_from(Path::new(&x))).flatten().collect();
+    println!("[{}] {} point data records in {} files.", &module, records.len(), matches.free.len());
 
     let to_point_3d = move |record: &las::PointDataRecord| Point3D {
         x: ((record.x as f64) * x_scale_factor + x_offset),
@@ -150,7 +151,7 @@ fn main() {
 
     let tx_contours = ocad_tx.clone();
     let contour_thread = thread::spawn(move || {
-        contours::handler(&dtm, min_z, max_z, tx_contours);
+        contours::handler(&dtm, min_z, max_z, tx_contours, verbose);
     });
 
     meridians::add_meridians(&bounding_box, magnetic_declination+meridian_convergence, &ocad_tx, verbose);

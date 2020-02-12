@@ -1,4 +1,28 @@
 # Contours
+So, the contours didn't work very well. 
+
+From a mathematical contour `struct Contour` we need to define the points to use (or even Bezier). 
+
+Then use Simplify in the geo package. This requires moving to Coordinate / geo structs. Keep Point3D for the DTM.
+
+
+Remove over-detail: take a window of 9 points. 
+Calculate average distance between points (this can be a property in the dtm). If the distance between the extreme points is short enough, remove all intermediate points.
+
+
+Attempt to use flo_curves crate. fit_curve och fit_curve_cubic borde kunna användas för att ta fram Beziers. 48 punkter i taget - ger en reduktion med en faktor 4/48 = 1/12. 30 MB blir då ungefär 2,5 MB. 
+
+Identify a stretch with sufficient x-y distance between 3 points. If no such stretch exists, then remove the contour completely. 
+
+Get the vector from the last point.
+
+Continue with points from true contour. Project onto vector. If distance is small enough (2 m?) keep going.
+
+If 2-3 consecutive points all are on the same side
+
+
+
+For the next point, continue along the same vector ? m. Check distance to true contour. If clo
 
 
 # General boundary improvements

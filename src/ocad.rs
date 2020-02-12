@@ -21,7 +21,7 @@ enum PointType {
 }
 
 #[derive(Clone,Debug)]
-enum Segment {
+pub enum Segment {
     Move(Point),
     Bezier(Point,Point,Point),
     Line(Point),
@@ -53,7 +53,7 @@ impl ObjectType {
 pub struct Object {
     pub object_type: ObjectType,
     pub symbol_number: i32,
-    segments: Vec<Segment>,
+    pub segments: Vec<Segment>,
 }
 
 #[derive(Debug)]
@@ -146,9 +146,9 @@ struct Strings {
     record_type: i32,
 }
 
-fn is_clockwise(p: &Vec<Point>) -> bool {
-    p.windows(2).fold(0f64, |sum, pts| sum + pts[0].east*pts[1].north - pts[1].east*pts[0].north) < 0f64
-}
+// fn is_clockwise(p: &Vec<Point>) -> bool {
+//     p.windows(2).fold(0f64, |sum, pts| sum + pts[0].east*pts[1].north - pts[1].east*pts[0].north) < 0f64
+// }
 
 pub fn post_objects_without_clipping(vertex_lists: Vec<Vec<Point>>, symbols: &Vec<GraphSymbol>, post_box: &Sender<Object>) {
 
