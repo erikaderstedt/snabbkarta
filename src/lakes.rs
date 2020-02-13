@@ -18,9 +18,10 @@ pub fn should_grow_lake(lake: &Boundary, halfedge: Halfedge) -> bool {
         lake.indices_for_each_triangle[triangle] & TRIANGLE_CONTAINS_WATER_POINT > 0)
 }
 
-pub fn handler( records: &Vec<PointDataRecord>, record_to_point_3d: &dyn Fn(&PointDataRecord) -> Point3D,
-            dtm: &DigitalTerrainModel, 
-            post_box: Sender<ocad::Object>) {
+pub fn find_lakes( records: &Vec<PointDataRecord>, record_to_point_3d: &dyn Fn(&PointDataRecord) -> Point3D,
+            dtm: &mut DigitalTerrainModel, 
+            post_box: &Sender<ocad::Object>,
+            verbose: bool) {
 
     let module = "LAKE".blue();
 
@@ -61,38 +62,73 @@ pub fn handler( records: &Vec<PointDataRecord>, record_to_point_3d: &dyn Fn(&Poi
         }
 
         if dtm.normals[triangle][2] >= Z_NORMAL_REQUIREMENT {
-            let mut lake = Boundary {
-                halfedges: Vec::new(),
-                islands: Vec::new(),
-                index: lake_index,
-                dtm: dtm,
-                indices_for_each_triangle: &mut lake_indices_for_triangles,
-            };
+            {
+                let mut lake = Boundary {
+                    halfedges: Vec::new(),
+                    islands: Vec::new(),
+                    index: lake_index,
+                    dtm: dtm,
+                    indices_for_each_triangle: &mut lake_indices_for_triangles,
+                };
 
-            lake.grow_from_triangle(triangle, &should_grow_lake);
-            if lake.halfedges.len() > 3 {
-                lake.split_into_lake_and_islands();
-                ocad::post_objects_without_clipping(
-                    lake.extract_vertices(), 
-                    &vec![ocad::GraphSymbol::Fill(301002)],
-                    &post_box);
+                lake.grow_from_triangle(triangle, &should_grow_lake);
+                if lake.halfedges.len() > 3 {
 
-                actual_lakes = actual_lakes + 1;
+                    lake.split_into_lake_and_islands();
+                    ocad::post_objects_without_clipping(
+                        lake.extract_vertices(), 
+                        &vec![ocad::GraphSymbol::Fill(301002)],
+                        &post_box);
 
-                let mut border = Vec::new();
-                border.append(&mut lake.extract_interior_segments(&lake.halfedges));
-                for i in lake.islands.iter() {
-                    border.append(&mut lake.extract_interior_segments(i));
+                    actual_lakes = actual_lakes + 1;
+
+                    let mut border = Vec::new();
+                    border.append(&mut lake.extract_interior_segments(&lake.halfedges));
+                    for i in lake.islands.iter() {
+                        border.append(&mut lake.extract_interior_segments(i));
+                    }
+                    ocad::post_objects_without_clipping(
+                        border, 
+                        &vec![ocad::GraphSymbol::Stroke(301001, false)],
+                        &post_box);
                 }
-                ocad::post_objects_without_clipping(
-                    border, 
-                    &vec![ocad::GraphSymbol::Stroke(301001, false)],
-                    &post_box);
+            }
+
+            // Alter the dtm so that the z value of all lake triangles is the median z value of the lake.
+            let triangles_for_this_lake: Vec<usize> = lake_indices_for_triangles.iter()
+                .enumerate()
+                .filter(|i| *(i.1) == lake_index)
+                .map(|i| i.0)
+                .collect();
+
+                println!("{} triangles in lake.", triangles_for_this_lake.len());
+
+            let mut average_z: Vec<f64> = triangles_for_this_lake.iter().map(|i| {
+                let (min,max) = dtm.z_limits[*i];
+                (min+max)*0.5
+            }).collect();
+
+            average_z.sort_by(|a,b| if a < b { std::cmp::Ordering::Less } else { std::cmp::Ordering::Greater });
+            
+            let median_of_average_z = average_z[if average_z.len() > 2 { average_z.len()/2 } else { 0 }];
+
+            for i in triangles_for_this_lake {
+                dtm.points[dtm.vertices[i*3]].z = median_of_average_z;
+                dtm.points[dtm.vertices[i*3+1]].z = median_of_average_z;
+                dtm.points[dtm.vertices[i*3+2]].z = median_of_average_z;
             }
 
             lake_index = lake_index + 1;
         }
     }
-    println!("[{}] Found {} lakes.", &module, actual_lakes);
 
+    if verbose {
+        println!("[{}] Found {} lakes.", &module, actual_lakes);
+    }
+
+    dtm.recalculate_zlimits_and_normals();
+    if verbose {
+        println!("[{}] Recalculated DTM at lake shorelines.", &module);
+    }
+    
 }

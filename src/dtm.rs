@@ -91,18 +91,6 @@ impl DigitalTerrainModel {
         let max_y = ground_points.iter().map(|p| p.y).fold(0./0., f64::max) - MARGIN;
         let min_y = ground_points.iter().map(|p| p.y).fold(0./0., f64::min) + MARGIN;
 
-        let normals = triangulation.triangles
-            .chunks(3)
-            .map(|i| [&ground_points[i[0]], &ground_points[i[1]], &ground_points[i[2]]])
-            .map(|p| {
-                let v = Point3D { x: p[1].x-p[0].x, y: p[1].y-p[0].y, z: p[1].z-p[0].z };
-                let u = Point3D { x: p[2].x-p[0].x, y: p[2].y-p[0].y, z: p[2].z-p[0].z };
-                let nx = u.y*v.z - u.z*v.y;
-                let ny = u.z*v.x - u.x*v.z;
-                let nz = u.x*v.y - u.y*v.x;
-                let l = f64::sqrt(nx*nx + ny*ny + nz*nz);
-                [nx/l, ny/l, nz/l]
-            }).collect();
         
         let exteriors = triangulation.triangles
             .chunks(3)
@@ -127,23 +115,41 @@ impl DigitalTerrainModel {
                 p[2].x * (p[0].y - p[1].y)) * 0.5)
             }).collect();
 
-        let z_limits = triangulation.triangles
+        let mut dtm = DigitalTerrainModel {
+            points: ground_points,
+            vertices: triangulation.triangles.clone(),
+            halfedges: triangulation.halfedges.clone(),
+            num_triangles: num_triangles,
+            normals: Vec::new(), exterior: exteriors, areas: areas, z_limits: Vec::new(),
+        };
+
+        dtm.recalculate_zlimits_and_normals();
+        dtm
+    }
+
+    pub fn recalculate_zlimits_and_normals(&mut self) {
+        self.normals = self.vertices
             .chunks(3)
-            .map(|i| [&ground_points[i[0]], &ground_points[i[1]], &ground_points[i[2]]])
+            .map(|i| [&self.points[i[0]], &self.points[i[1]], &self.points[i[2]]])
+            .map(|p| {
+                let v = Point3D { x: p[1].x-p[0].x, y: p[1].y-p[0].y, z: p[1].z-p[0].z };
+                let u = Point3D { x: p[2].x-p[0].x, y: p[2].y-p[0].y, z: p[2].z-p[0].z };
+                let nx = u.y*v.z - u.z*v.y;
+                let ny = u.z*v.x - u.x*v.z;
+                let nz = u.x*v.y - u.y*v.x;
+                let l = f64::sqrt(nx*nx + ny*ny + nz*nz);
+                [nx/l, ny/l, nz/l]
+            }).collect();
+
+        self.z_limits = self.vertices
+            .chunks(3)
+            .map(|i| [&self.points[i[0]], &self.points[i[1]], &self.points[i[2]]])
             .map(|p| {
                 
                 let zs = [p[0].z, p[1].z, p[2].z];
                 (zs.iter().cloned().fold(0./0., f64::min), 
                  zs.iter().cloned().fold(0./0., f64::max))
             }).collect();
-
-        DigitalTerrainModel {
-            points: ground_points,
-            vertices: triangulation.triangles.clone(),
-            halfedges: triangulation.halfedges.clone(),
-            num_triangles: num_triangles,
-            normals: normals, exterior: exteriors, areas: areas, z_limits: z_limits,
-        }
     }
 
     fn next_triangle_toward_point(&self, point: &Point3D, triangle: usize) -> Option<usize> {

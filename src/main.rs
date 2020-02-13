@@ -140,14 +140,10 @@ fn main() {
         z: ((record.z as f64) * z_scale_factor + z_offset),
     };
 
-    let dtm = dtm::DigitalTerrainModel::create(&records, &to_point_3d);
+    let mut dtm = dtm::DigitalTerrainModel::create(&records, &to_point_3d);
     println!("[{}] DTM triangulation complete, {:?} triangles", &module, dtm.num_triangles);
 
-    let dtm_for_lakes = dtm.clone();
-    let tx_lakes = ocad_tx.clone();
-    let lake_thread = thread::Builder::new().name("lakes".into()).spawn(move || {
-        lakes::handler(&records, &to_point_3d, &dtm_for_lakes, tx_lakes);
-    }).expect("Unable to start lake thread.");
+    lakes::find_lakes(&records, &to_point_3d, &mut dtm, &ocad_tx, verbose);
 
     let tx_contours = ocad_tx.clone();
     let contour_thread = thread::spawn(move || {
@@ -157,7 +153,6 @@ fn main() {
     meridians::add_meridians(&bounding_box, magnetic_declination+meridian_convergence, &ocad_tx, verbose);
 
     preexisting_map_thread.join().expect("Unable to finish pre-existing map thread.");
-    lake_thread.join().expect("Unable to finish lake thread.");
 
     contour_thread.join().expect("Unable to finish contour thread.");
 
