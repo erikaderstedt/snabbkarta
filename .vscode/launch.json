@@ -1,0 +1,45 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'snabbkarta'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=snabbkarta",
+                    "--package=snabbkarta"
+                ],
+                "filter": {
+                    "name": "snabbkarta",
+                    "kind": "bin"
+                }
+            },
+            "args": ["/Users/erik/Documents/Laserkarta/Egen LIDAR/LAS-filer/09B009_64275_3225_25.las"],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'snabbkarta'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=snabbkarta",
+                    "--package=snabbkarta"
+                ],
+                "filter": {
+                    "name": "snabbkarta",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}
