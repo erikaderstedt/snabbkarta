@@ -61,8 +61,8 @@ impl Contour {
                 score = score + BONUS_FOR_ON_CLIFF;
             }
 
-            let f = normals[*t][Z_NORMAL] - 1f64;
-            score = score + f*f*20.0;
+            let f = (normals[*t][Z_NORMAL] - 1f64)*2.0 - 1.0;
+            score = score + f*f*f*2000.0;
         }
 
         if self.closed && length < DESIRED_LENGTH_FOR_CLOSED_CONTOUR {
