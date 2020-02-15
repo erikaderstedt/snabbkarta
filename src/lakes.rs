@@ -3,20 +3,12 @@ use colored::*;
 use super::ocad;
 use std::sync::mpsc::Sender;
 use super::las::PointDataRecord;
-use super::dtm::{DigitalTerrainModel,Point3D,Halfedge, Z_NORMAL};
+use super::dtm::{DigitalTerrainModel,Point3D,Halfedge,Terrain,Z_NORMAL};
 use super::boundary::Boundary;
 
 const Z_NORMAL_REQUIREMENT: f64 = 0.9993f64;
 const TRIANGLE_CONTAINS_WATER_POINT: usize = 0x80000000;
 const LAKE_INDEX_MASK: usize = 0x7fffffff;
-
-pub fn should_grow_lake(lake: &Boundary, halfedge: Halfedge) -> bool {
-    let triangle = halfedge / 3;
-    lake.indices_for_each_triangle[triangle] & LAKE_INDEX_MASK == 0 && // Not already claimed.triangle
-        (lake.dtm.normals[triangle][Z_NORMAL] >= Z_NORMAL_REQUIREMENT ||
-        (lake.dtm.length_of_halfedge(halfedge) > 5.0 && !lake.dtm.exterior[triangle]) || // TODO: also not exterior
-        lake.indices_for_each_triangle[triangle] & TRIANGLE_CONTAINS_WATER_POINT > 0)
-}
 
 pub fn find_lakes( records: &Vec<PointDataRecord>, record_to_point_3d: &dyn Fn(&PointDataRecord) -> Point3D,
             dtm: &mut DigitalTerrainModel, 
@@ -54,6 +46,17 @@ pub fn find_lakes( records: &Vec<PointDataRecord>, record_to_point_3d: &dyn Fn(&
     let mut lake_index: usize = 1;
     let mut actual_lakes = 0;
 
+    let normals = dtm.normals();
+    let z_limits = dtm.z_limits();
+
+    let should_grow_lake = |lake: &Boundary, halfedge: Halfedge| -> bool {
+        let triangle = halfedge / 3;
+        lake.indices_for_each_triangle[triangle] & LAKE_INDEX_MASK == 0 && // Not already claimed.triangle
+            (normals[triangle][Z_NORMAL] >= Z_NORMAL_REQUIREMENT ||
+            (lake.dtm.length_of_halfedge(halfedge) > 5.0 && !lake.dtm.exterior[triangle]) || // TODO: also not exterior
+            lake.indices_for_each_triangle[triangle] & TRIANGLE_CONTAINS_WATER_POINT > 0)
+    };
+
     for i in 0..water_points.len() {
         triangle = triangle_indices_for_water_points[i];
         
@@ -61,7 +64,7 @@ pub fn find_lakes( records: &Vec<PointDataRecord>, record_to_point_3d: &dyn Fn(&
             continue; 
         }
 
-        if dtm.normals[triangle][2] >= Z_NORMAL_REQUIREMENT {
+        if normals[triangle][2] >= Z_NORMAL_REQUIREMENT {
             {
                 let mut lake = Boundary {
                     halfedges: Vec::new(),
@@ -101,10 +104,8 @@ pub fn find_lakes( records: &Vec<PointDataRecord>, record_to_point_3d: &dyn Fn(&
                 .map(|i| i.0)
                 .collect();
 
-                println!("{} triangles in lake.", triangles_for_this_lake.len());
-
             let mut average_z: Vec<f64> = triangles_for_this_lake.iter().map(|i| {
-                let (min,max) = dtm.z_limits[*i];
+                let (min,max) = z_limits[*i];
                 (min+max)*0.5
             }).collect();
 
@@ -116,6 +117,7 @@ pub fn find_lakes( records: &Vec<PointDataRecord>, record_to_point_3d: &dyn Fn(&
                 dtm.points[dtm.vertices[i*3]].z = median_of_average_z;
                 dtm.points[dtm.vertices[i*3+1]].z = median_of_average_z;
                 dtm.points[dtm.vertices[i*3+2]].z = median_of_average_z;
+                dtm.terrain[i] = Terrain::Lake;
             }
 
             lake_index = lake_index + 1;
@@ -124,11 +126,6 @@ pub fn find_lakes( records: &Vec<PointDataRecord>, record_to_point_3d: &dyn Fn(&
 
     if verbose {
         println!("[{}] Found {} lakes.", &module, actual_lakes);
-    }
-
-    dtm.recalculate_zlimits_and_normals();
-    if verbose {
-        println!("[{}] Recalculated DTM at lake shorelines.", &module);
     }
     
 }

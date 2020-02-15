@@ -1,8 +1,8 @@
 use super::shapefiles::SurveyAuthorityConfiguration;
 use super::ocad::GraphSymbol::{self,Stroke,Fill};
-use super::geometry;
+//use super::geometry;
 use dbase;
-use super::sweref_to_wgs84::Sweref;
+//use super::sweref_to_wgs84::Sweref;
 
 // https://www.lantmateriet.se/globalassets/kartor-och-geografisk-information/kartor/fastshmi.pdf
 

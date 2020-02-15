@@ -147,7 +147,7 @@ fn main() {
 
     let tx_contours = ocad_tx.clone();
     let contour_thread = thread::spawn(move || {
-        contours::handler(&dtm, min_z, max_z, tx_contours, verbose);
+        contours::create_contours(dtm, min_z, max_z, z_scale_factor, tx_contours, verbose);
     });
 
     meridians::add_meridians(&bounding_box, magnetic_declination+meridian_convergence, &ocad_tx, verbose);

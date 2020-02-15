@@ -49,16 +49,26 @@ impl Point3D {
     }
 }
 
+#[derive(Clone,PartialEq)]
+pub enum Terrain {
+    Unclassified,
+    Lake,
+    Cliff,
+}
+
 #[derive(Clone)]
 pub struct DigitalTerrainModel {
     pub points: Vec<super::Point3D>,
+    // "vertices" contains the point indices for each triangle, in chunks of three
+    // Indices 0..3 are the points for the first triangle, as indices into "points".
     pub vertices: Vec<usize>,
+    // Halfedges contains the opposite halfedge of each halfedge, or "EMPTY" if the 
+    // halfedge is on the convex hull (outer edge) of the Delauney triangulation.
     pub halfedges: Vec<Halfedge>,
     pub num_triangles: usize,
-    pub normals: Vec<[f64;3]>,
     pub areas: Vec<f64>,
     pub exterior: Vec<bool>,
-    pub z_limits: Vec<(f64,f64)>,
+    pub terrain: Vec<Terrain>,
 }
 
 impl DigitalTerrainModel {
@@ -115,21 +125,18 @@ impl DigitalTerrainModel {
                 p[2].x * (p[0].y - p[1].y)) * 0.5)
             }).collect();
 
-        let mut dtm = DigitalTerrainModel {
+        DigitalTerrainModel {
             points: ground_points,
             vertices: triangulation.triangles.clone(),
             halfedges: triangulation.halfedges.clone(),
             num_triangles: num_triangles,
-            normals: Vec::new(), exterior: exteriors, areas: areas, z_limits: Vec::new(),
-        };
-
-        dtm.recalculate_zlimits_and_normals();
-        dtm
+            terrain: vec![Terrain::Unclassified; num_triangles],
+            exterior: exteriors, areas: areas,
+        }
     }
 
-    pub fn recalculate_zlimits_and_normals(&mut self) {
-        self.normals = self.vertices
-            .chunks(3)
+    pub fn normals(&self) -> Vec<[f64;3]> {
+        self.vertices.chunks(3)
             .map(|i| [&self.points[i[0]], &self.points[i[1]], &self.points[i[2]]])
             .map(|p| {
                 let v = Point3D { x: p[1].x-p[0].x, y: p[1].y-p[0].y, z: p[1].z-p[0].z };
@@ -139,17 +146,18 @@ impl DigitalTerrainModel {
                 let nz = u.x*v.y - u.y*v.x;
                 let l = f64::sqrt(nx*nx + ny*ny + nz*nz);
                 [nx/l, ny/l, nz/l]
-            }).collect();
+            }).collect()
+    }
 
-        self.z_limits = self.vertices
-            .chunks(3)
+    pub fn z_limits(&self) -> Vec<(f64,f64)> {
+        self.vertices.chunks(3)
             .map(|i| [&self.points[i[0]], &self.points[i[1]], &self.points[i[2]]])
             .map(|p| {
                 
                 let zs = [p[0].z, p[1].z, p[2].z];
                 (zs.iter().cloned().fold(0./0., f64::min), 
                  zs.iter().cloned().fold(0./0., f64::max))
-            }).collect();
+            }).collect()
     }
 
     fn next_triangle_toward_point(&self, point: &Point3D, triangle: usize) -> Option<usize> {

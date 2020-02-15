@@ -1,29 +1,29 @@
 # Contours
-So, the contours didn't work very well. 
+## Scoring
+Triangle adjacent to lake - bad. 
+Closed contours should have a diameter of 5 m -> circumference of 30 m. 
+Inflection points (how?) are good.
+Many direction changes - really bad. Some are ok.
+Using cliff triangle - very good.
 
-From a mathematical contour `struct Contour` we need to define the points to use (or even Bezier). 
-
-Then use Simplify in the geo package. This requires moving to Coordinate / geo structs. Keep Point3D for the DTM.
-
-
-Remove over-detail: take a window of 9 points. 
-Calculate average distance between points (this can be a property in the dtm). If the distance between the extreme points is short enough, remove all intermediate points.
-
-
-Attempt to use flo_curves crate. fit_curve och fit_curve_cubic borde kunna användas för att ta fram Beziers. 48 punkter i taget - ger en reduktion med en faktor 4/48 = 1/12. 30 MB blir då ungefär 2,5 MB. 
-
-Identify a stretch with sufficient x-y distance between 3 points. If no such stretch exists, then remove the contour completely. 
-
-Get the vector from the last point.
-
-Continue with points from true contour. Project onto vector. If distance is small enough (2 m?) keep going.
-
-If 2-3 consecutive points all are on the same side
+## Identify inflection points
+Window of 7 points. 
+4 outer points - identify Bezier.
+Sum of distance to 3 inner points must be large enough. 
+Middle point is inflection point. 
 
 
+- Generate 0,5 m contours
+- Calculate contour scores.
+- 10 different - create a thread for each one. Post (z_offset, Vec<Contour>) to collator
+- Decide overall 5 m interval. 1 out of 10.
+- Deviate 0,5 - 1 m from global
+- Locally deviate up to 1,5 m for a part of the contour (optional)
+- Replace small contours with knolls
+- Look 1,5-4 m up to find small closed curves and add hjälpkurvor for those
+- Select one 5 m level for stödkurvor symbol.
 
-For the next point, continue along the same vector ? m. Check distance to true contour. If clo
-
+Also need a better (or more tailored) Bezier fitting algoritm, that doesn't introduce artifacts. Is there a way to identify sänkor / näsor - these need to be control points.
 
 # General boundary improvements
 
