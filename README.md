@@ -13,10 +13,6 @@ Sum of distance to 3 inner points must be large enough.
 Middle point is inflection point. 
 
 
-- Generate 0,5 m contours
-- Calculate contour scores.
-- 10 different - create a thread for each one. Post (z_offset, Vec<Contour>) to collator
-- Decide overall 5 m interval. 1 out of 10.
 - Deviate 0,5 - 1 m from global
 - Locally deviate up to 1,5 m for a part of the contour (optional)
 - Replace small contours with knolls
@@ -24,6 +20,9 @@ Middle point is inflection point.
 - Select one 5 m level for stödkurvor symbol.
 
 Also need a better (or more tailored) Bezier fitting algoritm, that doesn't introduce artifacts. Is there a way to identify sänkor / näsor - these need to be control points.
+
+Port or use bezier.c from C code.
+Start with march identification? Once that is done then maybe maps are somewhat runnable. MVP.
 
 # General boundary improvements
 
@@ -49,6 +48,9 @@ This should actually be fairly quick now!
 Streams - are they extra heavy? 
 
 Start one area at a time -> we don't need to merge two areas.
+
+OSM or FAST threads should post streams (as Vec<Sweref>)
+All triangles intersecting these lines should be cast as Terrain::Stream. Not just corner points, use interpolation between Sweref points.
 
 # Vegetation 
 

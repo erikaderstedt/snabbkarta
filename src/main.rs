@@ -20,7 +20,10 @@ mod lakes;
 mod dtm;
 mod boundary;
 mod meridians;
+mod cliffs;
 mod contours;
+mod linear_regression;
+
 
 use sweref_to_wgs84::{Sweref,Wgs84};
 use dtm::Point3D;

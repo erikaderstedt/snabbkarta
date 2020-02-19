@@ -13,15 +13,19 @@ pub trait TriangleWalk {
 
 impl TriangleWalk for Halfedge {
     fn next(&self) -> Halfedge {
-        match self % 3 {
-            2 => self - 2,
-            _ => self + 1,
+        if *self == EMPTY { EMPTY } else {
+            match self % 3 {
+                2 => self - 2,
+                _ => self + 1,
+            }
         }
     }
     fn prev(&self) -> Halfedge {
-        match self % 3 {
+        if *self == EMPTY { EMPTY } else {
+            match self % 3 {
             0 => self + 2,
             _ => self - 1,
+            }
         }
     }    
 }
@@ -72,6 +76,23 @@ pub struct DigitalTerrainModel {
 }
 
 impl DigitalTerrainModel {
+
+    pub fn triangle_incenter(&self, triangle: usize) -> Point3D {
+        let p0 = self.points[self.vertices[triangle*3+0]];
+        let p1 = self.points[self.vertices[triangle*3+1]];
+        let p2 = self.points[self.vertices[triangle*3+2]];
+
+        let a = p0.distance_2d_to(&p1);
+        let b = p1.distance_2d_to(&p2);
+        let c = p2.distance_2d_to(&p0);
+        let s = a + b + c;
+
+        Point3D {
+            x: (a * p0.x + b * p1.x + c * p2.x)/s,
+            y: (a * p0.y + b * p1.y + c * p2.y)/s,
+            z: (a * p0.z + b * p1.z + c * p2.z)/s,
+        }
+    }
 
     pub fn opposite(&self, h: Halfedge) -> Halfedge {
         self.halfedges[h]
