@@ -22,8 +22,6 @@ mod boundary;
 mod meridians;
 mod cliffs;
 mod contours;
-mod linear_regression;
-
 
 use sweref_to_wgs84::{Sweref,Wgs84};
 use dtm::Point3D;
@@ -147,6 +145,7 @@ fn main() {
     println!("[{}] DTM triangulation complete, {:?} triangles", &module, dtm.num_triangles);
 
     lakes::find_lakes(&records, &to_point_3d, &mut dtm, &ocad_tx, verbose);
+    cliffs::detect_cliffs(&mut dtm, &ocad_tx, verbose);
 
     let tx_contours = ocad_tx.clone();
     let contour_thread = thread::spawn(move || {
