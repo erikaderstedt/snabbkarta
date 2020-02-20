@@ -65,8 +65,14 @@ pub fn detect_cliffs(dtm: &mut DigitalTerrainModel,
         match Plane::from_points(&incenters) {
             Some(plane) if plane.angle_to_vertical() < MAX_ANGLE_TO_VERTICAL => {
                 // curve reconstruction from unorganized points
-                // Determine initial P0,P1,P2,P3. P0 and P3 extreme points along intersection
-                // of plane with average z. P1 and P2 lie between extreme points. 
+
+                // A + dot(AP,AB) / dot(AB,AB) * AB
+                // t = dot(AP,AB)/dot(AB,AB)
+                // Determine all t values.
+                // Get min / max. 
+                // Calculate P0, P3 
+                // Calculate P1 = P0 + 0.33(P3-P0)
+                // Calculate P2 = P0 + 0.66(P3-P0)
 
                 // Solve for t. 
 
