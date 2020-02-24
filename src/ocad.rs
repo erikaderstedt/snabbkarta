@@ -10,7 +10,7 @@ use super::geometry;
 
 static SOFT_ISOM_2017: &'static [u8] = include_bytes!("../20170608_symboluppsattning_isom_2017_ocad_12.ocd");
 
-use super::sweref_to_wgs84::Sweref as Point;
+use super::Sweref as Point;
 
 enum PointType {
     Normal,
@@ -29,6 +29,7 @@ pub enum Segment {
 
 #[derive(Debug,PartialEq)]
 pub enum ObjectType {
+    #[allow(dead_code)]
     Point(f64),
     Area,
     Line(bool),

@@ -1,4 +1,4 @@
-use super::sweref_to_wgs84::Sweref;
+use super::Sweref;
 use nalgebra::DMatrix;
 use super::dtm::Point3D;
 
@@ -109,7 +109,7 @@ impl LineSegment {
 pub struct Plane {
     normal: [f64;3],
     point: Point3D,
-    average_z: f64,
+    pub average_z: f64,
 }
 
 impl Plane {
@@ -158,10 +158,6 @@ impl Plane {
 
     pub fn angle_to_vertical(&self) -> f64 {
         f64::acos(self.normal[2]).to_degrees()
-    }
-
-    pub fn average_z(&self) -> f64 {
-        self.point.z
     }
 
     pub fn intersection_with_z(&self, z: f64) -> (Point3D,Point3D) {

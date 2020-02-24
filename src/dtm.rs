@@ -51,6 +51,18 @@ impl Point3D {
         let dy = other.y - self.y;
         f64::sqrt(dx*dx + dy*dy)
     }
+
+    pub fn dot(&self, other: &Point3D) -> f64 {
+        self.x*other.x + self.y*other.y + self.z*other.z
+    }
+}
+
+impl std::ops::Sub for Point3D {
+    type Output = Point3D;
+
+    fn sub(self, other: Point3D) -> Point3D {
+        Point3D { x: self.x - other.x, y: self.y - other.y, z: self.z - other.z, }
+    }
 }
 
 #[derive(Clone,PartialEq)]

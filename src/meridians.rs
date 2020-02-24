@@ -1,7 +1,7 @@
 use std::sync::mpsc::Sender;
 use super::ocad::{self, GraphSymbol};
 use super::geometry;
-use super::sweref_to_wgs84::Sweref;
+use super::Sweref;
 use colored::*;
 
 const MERIDIAN_SPACING: f64 = 300.0;

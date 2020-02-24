@@ -1,7 +1,7 @@
 
 use super::dtm::{DigitalTerrainModel,Halfedge,TriangleWalk,Point3D};
 use delaunator::EMPTY;
-use super::sweref_to_wgs84::Sweref;
+use super::Sweref;
 
 pub struct Boundary<'a> {
     pub halfedges: Vec<Halfedge>,

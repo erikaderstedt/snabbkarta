@@ -5,10 +5,10 @@ use std::sync::mpsc::{channel,Receiver,Sender};
 use std::thread;
 use std::sync::Arc;
 use std::ops::Deref;
-use super::sweref_to_wgs84::Sweref;
+use super::Sweref;
 use delaunator::EMPTY;
 use flo_curves::*;
-use ::geo::{Point,Coordinate,LineString};
+use ::geo::{Coordinate,LineString};
 use ::geo::algorithm::simplifyvw::SimplifyVW;
 use ::geo::algorithm::euclidean_length::EuclideanLength;
 use std::cmp::Ordering;
@@ -30,10 +30,6 @@ pub struct Contour {
     closed: bool,
     original_length: f64,
     base_elevation: f64,
-}
-
-fn point_to_sweref(c: &Point<f64>) -> Sweref {
-    Sweref { east: c.x(), north: c.y() }
 }
 
 fn coord2_to_sweref(c: &Coord2) -> Sweref {
@@ -92,7 +88,7 @@ impl Contour {
             .points_iter()
             .enumerate()
             .map(|x| {
-                let s = point_to_sweref(&x.1);
+                let s: Sweref = Sweref::from(&x.1);
                 if x.0 == 0 { ocad::Segment::Move(s) } else { ocad::Segment::Line(s) }
             }).collect();
 

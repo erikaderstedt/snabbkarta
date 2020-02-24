@@ -51,7 +51,8 @@ pub fn find_lakes( records: &Vec<PointDataRecord>, record_to_point_3d: &dyn Fn(&
 
     let should_grow_lake = |lake: &Boundary, halfedge: Halfedge| -> bool {
         let triangle = halfedge / 3;
-        lake.indices_for_each_triangle[triangle] & LAKE_INDEX_MASK == 0 && // Not already claimed.triangle
+        lake.indices_for_each_triangle[triangle] & LAKE_INDEX_MASK == 0 && 
+        lake.dtm.terrain[triangle] == Terrain::Unclassified &&
             (normals[triangle][Z_NORMAL] >= Z_NORMAL_REQUIREMENT ||
             (lake.dtm.length_of_halfedge(halfedge) > 5.0 && !lake.dtm.exterior[triangle]) || // TODO: also not exterior
             lake.indices_for_each_triangle[triangle] & TRIANGLE_CONTAINS_WATER_POINT > 0)

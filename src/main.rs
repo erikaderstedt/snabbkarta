@@ -8,7 +8,7 @@ use std::thread;
 use std::sync::mpsc::{channel,Receiver,Sender};
 
 mod las;
-mod sweref_to_wgs84;
+mod sweref; mod wgs84;
 mod wmm;
 mod osm;
 mod ocad;
@@ -23,7 +23,8 @@ mod meridians;
 mod cliffs;
 mod contours;
 
-use sweref_to_wgs84::{Sweref,Wgs84};
+use sweref::Sweref;
+use wgs84::Wgs84;
 use dtm::Point3D;
 
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -91,15 +92,15 @@ fn main() {
 
     let height_over_sea_level: f64 = (max_z + min_z)*0.5;
     let bounding_box = geometry::Rectangle { southwest: Sweref { north: min_y, east: min_x, }, northeast: Sweref { north: max_y, east: max_x, }};
-    let middle_of_map = Wgs84::from_sweref( &bounding_box.middle() );
-    let top_of_map = Sweref::from_wgs84(
+    let middle_of_map = Wgs84::from( &bounding_box.middle() );
+    let top_of_map = Sweref::from(
         &Wgs84 { latitude: middle_of_map.latitude + 0.003, longitude: middle_of_map.longitude});
-    let bottom_of_map = Sweref::from_wgs84(
+    let bottom_of_map = Sweref::from(
         &Wgs84 { latitude: middle_of_map.latitude - 0.003, longitude: middle_of_map.longitude});
     let meridian_convergence: f64 = 90.0f64 - f64::atan2(top_of_map.north-bottom_of_map.north, top_of_map.east - bottom_of_map.east)*180f64/PI;
     let magnetic_declination: f64 = wmm::get_todays_magnetic_declination(&middle_of_map, height_over_sea_level*0.001);
-    let northeast_corner = Wgs84::from_sweref(&bounding_box.northeast);
-    let southwest_corner = Wgs84::from_sweref(&bounding_box.southwest);
+    let northeast_corner = Wgs84::from(&bounding_box.northeast);
+    let southwest_corner = Wgs84::from(&bounding_box.southwest);
 
     if verbose {
         println!("[{}] Average height over sea level: {:.0} m", &module, height_over_sea_level);
@@ -144,8 +145,9 @@ fn main() {
     let mut dtm = dtm::DigitalTerrainModel::create(&records, &to_point_3d);
     println!("[{}] DTM triangulation complete, {:?} triangles", &module, dtm.num_triangles);
 
-    lakes::find_lakes(&records, &to_point_3d, &mut dtm, &ocad_tx, verbose);
+    // TODO: run cliffs / lakes in parallel.
     cliffs::detect_cliffs(&mut dtm, &ocad_tx, verbose);
+    lakes::find_lakes(&records, &to_point_3d, &mut dtm, &ocad_tx, verbose);
 
     let tx_contours = ocad_tx.clone();
     let contour_thread = thread::spawn(move || {

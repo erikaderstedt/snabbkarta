@@ -1,4 +1,4 @@
-use super::sweref_to_wgs84::Wgs84;
+use super::Wgs84;
 
 #[link(name = "WMM", kind = "static")]
 extern {

@@ -1,6 +1,6 @@
 use minreq;
 use std::sync::mpsc::Sender;
-use super::sweref_to_wgs84::{Wgs84,Sweref};
+use super::{Sweref,Wgs84};
 use std::fs::{File};
 use std::io::Write;
 use colored::*;
@@ -18,7 +18,7 @@ fn resolve_way<'a>(way: &'a osm::Way, doc: &'a osm::OSM) -> Vec<&'a Node> {
 }
 
 fn to_sweref(nodes: &Vec<&Node>) -> Vec<Sweref> {
-    nodes.iter().map(|node| Sweref::from_wgs84( &Wgs84 { latitude: node.lat, longitude: node.lon } )).collect()
+    nodes.iter().map(|node| Sweref::from( &Wgs84 { latitude: node.lat, longitude: node.lon } )).collect()
 }
 
 fn post_way(ways: Vec<Vec<&Node>>, symbols: &Vec<ocad::GraphSymbol>, post_box: &Sender<ocad::Object>, bounding_box: &geometry::Rectangle) {
@@ -58,7 +58,7 @@ pub fn load_osm(southwest: &Wgs84, northeast: &Wgs84, file: &Sender<ocad::Object
     };
     let doc = osm::OSM::parse(reader).expect("Unable to parse OSM file.");
 
-    let bounding_box = geometry::Rectangle { southwest: Sweref::from_wgs84(&southwest), northeast: Sweref::from_wgs84(&northeast), };
+    let bounding_box = geometry::Rectangle { southwest: Sweref::from(southwest), northeast: Sweref::from(northeast), };
     if verbose { println!("[{}] {} nodes, {} ways and {} relations", &module, doc.nodes.len(), doc.ways.len(), doc.relations.len()); }
 
     for (_, relation) in doc.relations.iter() {

@@ -3,7 +3,7 @@ use super::ffi_helpers::{read_instance,read_instances};
 use std::fs;
 use std::path::Path;
 use std::sync::mpsc::Sender;
-use super::sweref_to_wgs84::Sweref;
+use super::Sweref;
 use super::geometry;
 use colored::*;
 use dbase;
@@ -132,6 +132,7 @@ pub fn load_shapefiles<T: SurveyAuthorityConfiguration>(bounding_box: &geometry:
 
                 let symbols = authority.symbols_for_record(base_filename, &dbf_record.expect("Unable to read DBF record."));
                 ocad::post_objects(point_lists, &symbols, file, bounding_box);
+                records = records + 1;
             }
         } 
     }
