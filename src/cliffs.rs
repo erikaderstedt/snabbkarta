@@ -12,11 +12,11 @@ use colored::*;
 use std::f64;
 
 const MAX_ALLOWED_EDGE: f64 = 10.0;
-const MAX_ZNORMAL_FOR_SEED: f64 = 0.75f64;
-const MAX_ZNORMAL_FOR_GROW: f64 = 0.65f64;
+const MAX_ZNORMAL_FOR_SEED: f64 = 0.5f64;
+const MAX_ZNORMAL_FOR_GROW: f64 = 0.8f64;
 const MAX_ANGLE_TO_VERTICAL: f64 = 70f64;
 const MIN_REQUIRED_HEIGHT: f64 = 1.2f64;
-const MIN_REQUIRED_Z_DIFF: f64 = 0.5f64;
+const MIN_REQUIRED_Z_DIFF: f64 = 0.65f64;
 const UNPASSABLE_CLIFF: f64 = 2f64;
 
 pub fn detect_cliffs(dtm: &mut DigitalTerrainModel, 
@@ -61,7 +61,7 @@ pub fn detect_cliffs(dtm: &mut DigitalTerrainModel,
         // Take a seed triangle.
         // If it already has a cliff index, skip it.
         if cliff_index_per_triangle[seed_triangle] != 0 { continue };
-
+        
         let mut cliff = Boundary {
             halfedges: Vec::new(),
             islands: Vec::new(),
@@ -96,9 +96,9 @@ pub fn detect_cliffs(dtm: &mut DigitalTerrainModel,
 
             // Create plane from incenters and verify that angle to vertical is low enough.
             match Plane::from_points(&incenters) {
-                Some(plane) if plane.angle_to_vertical() < MAX_ANGLE_TO_VERTICAL => {
+                Some(plane) if plane.angle_to_vertical() > MAX_ANGLE_TO_VERTICAL => {
 
-                                    // Sort points along projection onto intersection with average z.
+                // Sort points along projection onto intersection with average z.
                 let (a,b) = plane.intersection_with_z(plane.average_z);
                 let ab = b - a;
                 let mut projections: Vec<(f64, Coordinate<f64>)> = incenters.iter()
@@ -122,91 +122,25 @@ pub fn detect_cliffs(dtm: &mut DigitalTerrainModel,
                             if x.0 == 0 { ocad::Segment::Move(s) } else { ocad::Segment::Line(s) }
                         }).collect();
 
-                        
-                        // let segments = incenters
-                        //     .iter()
-                        //     .enumerate()
-                        //     .map(|x| {
-                        //         let s: Sweref = Sweref { east: x.1.x, north: x.1.y, };
-                        //         if x.0 == 0 { ocad::Segment::Move(s) } else { ocad::Segment::Line(s) }
-                        //     }).collect();
+                    post_box.send(ocad::Object {
+                        object_type: ocad::ObjectType::Line(false),
+                        symbol_number: if height > UNPASSABLE_CLIFF { 201000 } else { 202000 },
+                        segments,
+                    }).expect("Unable to send cliff!");
 
-                                
-                        post_box.send(ocad::Object {
-                            object_type: ocad::ObjectType::Line(false),
-                            symbol_number: if height > UNPASSABLE_CLIFF { 201000 } else { 202000 },
-                            segments,
-                        }).expect("Unable to send cliff!");
+                    num_cliffs_output = num_cliffs_output + 1;
 
-                        num_cliffs_output = num_cliffs_output + 1;
-
-                        for (i,c) in cliff_index_per_triangle.iter().enumerate() {
-                            if *c == cliff_index {
-                                dtm.terrain[i] = Terrain::Cliff;
-                            }
+                    for (i,c) in cliff_index_per_triangle.iter().enumerate() {
+                        if *c == cliff_index {
+                            dtm.terrain[i] = Terrain::Cliff;
                         }
                     }
-                },
+                }},
                 _ => {},            
             };
         }
 
         cliff_index = cliff_index + 1;
-        // // Create plane from incenters and verify that angle to vertical is low enough.
-        // match Plane::from_points(&incenters) {
-        //     Some(plane) 
-        //         if plane.angle_to_vertical() < MAX_ANGLE_TO_VERTICAL && 
-        //             height > MIN_REQUIRED_HEIGHT => {
-
-        //         // Sort points along projection onto intersection with average z.
-        //         let (a,b) = plane.intersection_with_z(plane.average_z);
-        //         let ab = b - a;
-        //         let mut projections: Vec<(f64, Coordinate<f64>)> = incenters.iter()
-        //             .map(|p| {
-        //                 let ap = *p - a;
-        //                 (ap.dot(&ab) / ab.dot(&ab), Coordinate { x: p.x, y: p.y, })
-        //             }).collect();
-
-        //         projections.sort_by(|a,b| if a.0 < b.0 { Ordering::Less } else { Ordering::Greater });
-        //         let ordered_points: Vec<Coordinate<f64>> = projections.into_iter().map(|(_,p)| p).collect();
-        //         let linestring = LineString::from(ordered_points).simplifyvw(&5.0);
-
-        //         // curve reconstruction from unorganized points is non-trivial.
-        //         // I've experimented a bit with it but without success.
-
-        //         // let segments = linestring
-        //         //     .points_iter()
-        //         //     .enumerate()
-        //         //     .map(|x| {
-        //         //         let s: Sweref = Sweref::from(&x.1);
-        //         //         if x.0 == 0 { ocad::Segment::Move(s) } else { ocad::Segment::Line(s) }
-        //         //     }).collect();
-
-                    
-        //         let segments = incenters
-        //         .iter()
-        //         .enumerate()
-        //         .map(|x| {
-        //             let s: Sweref = Sweref { east: x.1.x, north: x.1.y, };
-        //             if x.0 == 0 { ocad::Segment::Move(s) } else { ocad::Segment::Line(s) }
-        //         }).collect();
-
-                    
-        //         //println!("{:?}", segments);
-        //         post_box.send(ocad::Object {
-        //             object_type: ocad::ObjectType::Line(false),
-        //             symbol_number: if height > UNPASSABLE_CLIFF { 201000 } else { 202000 },
-        //             segments,
-        //         }).expect("Unable to send cliff!");
-        //         outputted_cliffs = outputted_cliffs + 1;
-        //         for (i,c) in cliff_index_per_triangle.iter().enumerate() {
-        //             if *c == cliff_index {
-        //                 dtm.terrain[i] = Terrain::Cliff;
-        //             }
-        //         }
-        //     },
-        //     _ => { },
-        // };
     }
     if verbose {
         let module = "CLIFF".black();
