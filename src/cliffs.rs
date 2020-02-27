@@ -16,8 +16,8 @@ const MAX_ZNORMAL_FOR_SEED: f64 = 0.5f64;
 const MAX_ZNORMAL_FOR_GROW: f64 = 0.8f64;
 const MAX_ANGLE_TO_VERTICAL: f64 = 70f64;
 const MIN_REQUIRED_HEIGHT: f64 = 1.2f64;
-const MIN_REQUIRED_Z_DIFF: f64 = 0.65f64;
-const UNPASSABLE_CLIFF: f64 = 2f64;
+const MIN_REQUIRED_Z_DIFF: f64 = 0.45f64;
+const UNPASSABLE_CLIFF: f64 = 1.5f64; // Height is overestimated
 
 pub fn detect_cliffs(dtm: &mut DigitalTerrainModel, 
             post_box: &Sender<ocad::Object>,
@@ -61,7 +61,7 @@ pub fn detect_cliffs(dtm: &mut DigitalTerrainModel,
         // Take a seed triangle.
         // If it already has a cliff index, skip it.
         if cliff_index_per_triangle[seed_triangle] != 0 { continue };
-        
+
         let mut cliff = Boundary {
             halfedges: Vec::new(),
             islands: Vec::new(),
@@ -109,7 +109,7 @@ pub fn detect_cliffs(dtm: &mut DigitalTerrainModel,
 
                 projections.sort_by(|a,b| if a.0 < b.0 { Ordering::Less } else { Ordering::Greater });
                 let ordered_points: Vec<Coordinate<f64>> = projections.into_iter().map(|(_,p)| p).collect();
-                let linestring = LineString::from(ordered_points).simplifyvw(&5.0);
+                let linestring = LineString::from(ordered_points).simplifyvw(&10.0);
                 if linestring.euclidean_length() > 4.0 { 
                     // curve reconstruction from unorganized points is non-trivial.
                     // I've experimented a bit with it but without success.

@@ -22,6 +22,7 @@ mod boundary;
 mod meridians;
 mod cliffs;
 mod contours;
+mod water_model;
 
 use sweref::Sweref;
 use wgs84::Wgs84;

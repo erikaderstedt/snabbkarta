@@ -12,7 +12,6 @@ Window of 7 points.
 Sum of distance to 3 inner points must be large enough. 
 Middle point is inflection point. 
 
-
 - Deviate 0,5 - 1 m from global
 - Locally deviate up to 1,5 m for a part of the contour (optional)
 - Replace small contours with knolls
@@ -23,6 +22,10 @@ Also need a better (or more tailored) Bezier fitting algoritm, that doesn't intr
 
 Port or use bezier.c from C code.
 Start with march identification? Once that is done then maybe maps are somewhat runnable. MVP.
+
+# Cliffs
+
+Cliffs are often "broken" by triangles that are too flat. Allow more flat triangles when growing, but only in the direction of the cliff. Perhaps we should keep track of a plane continually while growing the cliff.
 
 # General boundary improvements
 
