@@ -52,8 +52,20 @@ impl Point3D {
         f64::sqrt(dx*dx + dy*dy)
     }
 
+    pub fn distance_3d_to(&self, other: &Point3D) -> f64 {
+        let dx = other.x - self.x;
+        let dy = other.y - self.y;
+        let dz = other.z - self.z;
+        f64::sqrt(dx*dx + dy*dy + dz*dz)
+    }
+
     pub fn dot(&self, other: &Point3D) -> f64 {
         self.x*other.x + self.y*other.y + self.z*other.z
+    }
+
+    pub fn normalized(&self) -> Point3D {
+        let f = self.dot(self);
+        Point3D { x: self.x / f, y: self.y / f, z: self.z / f, }
     }
 }
 
