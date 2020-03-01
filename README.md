@@ -33,6 +33,12 @@ Keep track of the total area. This way we can enforce a minimum requirement on a
 
 # Water model
 
+So, the water model didn't work out; manages to somewhat detect edges of marshes, but not well enough.
+
+Instead, attempt to locate areas that are flat. Distinguish between "diffus" and "normal" by height of trees.
+
+Build upon seed triangles, as long as z value is within 0.3 m. 
+
 Assign water quantity to each triangle in proportion to area.
 Find the recipient triangle for each triangle.
 Move water out in proportion to z-normal.
@@ -67,10 +73,5 @@ Can say that height below 5 m will be green. Height < 0.5 m should be yellow.
 
 Grow area as long as we are within 1 sigma of height and average triangle size.
 
-
-
-
 Exclusion list: remove intersections with residential land, and meadows.
-
-
 

@@ -22,7 +22,7 @@ mod boundary;
 mod meridians;
 mod cliffs;
 mod contours;
-mod water_model;
+mod marshes;
 
 use sweref::Sweref;
 use wgs84::Wgs84;
@@ -150,12 +150,15 @@ fn main() {
     cliffs::detect_cliffs(&mut dtm, &ocad_tx, verbose);
     lakes::find_lakes(&records, &to_point_3d, &mut dtm, z_scale_factor, &ocad_tx, verbose);
 
-    let tx_contours = ocad_tx.clone();
-    let contour_thread = thread::spawn(move || {
-        contours::create_contours(dtm, min_z, max_z, z_scale_factor, tx_contours, verbose);
-    });
+    let contour_thread = {
+        let tx_contours = ocad_tx.clone();
+        let dtm_clone = dtm.clone();
+        thread::spawn(move || {
+            contours::create_contours(dtm_clone, min_z, max_z, z_scale_factor, tx_contours, verbose); })
+    };
 
     meridians::add_meridians(&bounding_box, magnetic_declination+meridian_convergence, &ocad_tx, verbose);
+    marshes::detect_marshes_in(&mut dtm, &ocad_tx, &Sweref::from(&middle_of_map), verbose);
 
     preexisting_map_thread.join().expect("Unable to finish pre-existing map thread.");
 

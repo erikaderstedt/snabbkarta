@@ -108,11 +108,17 @@ impl LineSegment {
 
 pub struct Plane {
     normal: [f64;3],
-    point: Point3D,
+    pub point: Point3D,
     pub average_z: f64,
 }
 
 impl Plane {
+
+    pub fn normal_as_point(&self) -> Point3D {
+        Point3D { x: self.normal[0], y: self.normal[1], z: self.normal[2], }
+    }
+
+    pub fn z_normal(&self) -> f64 { self.normal[2] }
 
     pub fn from_points(points: &Vec<Point3D>) -> Option<Self> {
         /*  β1x + β2y + β3 = z
