@@ -14,7 +14,7 @@ use std::f64;
 const MAX_ALLOWED_EDGE: f64 = 10.0;
 const MAX_ZNORMAL_FOR_SEED: f64 = 0.5f64;
 const MAX_ZNORMAL_FOR_GROW: f64 = 0.8f64;
-const MAX_ANGLE_TO_VERTICAL: f64 = 70f64;
+const MIN_ANGLE_TO_VERTICAL: f64 = 70f64;
 const MIN_REQUIRED_HEIGHT: f64 = 1.2f64;
 const MIN_REQUIRED_Z_DIFF: f64 = 0.45f64;
 const UNPASSABLE_CLIFF: f64 = 1.5f64; // Height is overestimated
@@ -96,7 +96,7 @@ pub fn detect_cliffs(dtm: &mut DigitalTerrainModel,
 
             // Create plane from incenters and verify that angle to vertical is low enough.
             match Plane::from_points(&incenters) {
-                Some(plane) if plane.angle_to_vertical() > MAX_ANGLE_TO_VERTICAL => {
+                Some(plane) if plane.angle_to_vertical() > MIN_ANGLE_TO_VERTICAL => {
 
                 // Sort points along projection onto intersection with average z.
                 let (a,b) = plane.intersection_with_z(plane.average_z);
