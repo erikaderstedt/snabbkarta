@@ -64,7 +64,7 @@ impl Point3D {
     }
 
     pub fn normalized(&self) -> Point3D {
-        let f = self.dot(self);
+        let f = f64::sqrt(self.dot(self));
         Point3D { x: self.x / f, y: self.y / f, z: self.z / f, }
     }
 }
@@ -164,10 +164,9 @@ impl DigitalTerrainModel {
         let areas = triangulation.triangles
             .chunks(3)
             .map(|i| [&ground_points[i[0]], &ground_points[i[1]], &ground_points[i[2]]])
-            .map(|p| {
-                f64::abs((p[0].x * (p[1].y - p[2].y) +
-                p[1].x * (p[2].y - p[0].y) +
-                p[2].x * (p[0].y - p[1].y)) * 0.5)
+            .map(|p| { f64::abs(0.5*(p[0].x * (p[1].y - p[2].y) +
+                                     p[1].x * (p[2].y - p[0].y) +
+                                     p[2].x * (p[0].y - p[1].y)))
             }).collect();
 
         DigitalTerrainModel {
