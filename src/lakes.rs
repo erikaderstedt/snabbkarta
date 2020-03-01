@@ -12,6 +12,7 @@ const LAKE_INDEX_MASK: usize = 0x7fffffff;
 
 pub fn find_lakes( records: &Vec<PointDataRecord>, record_to_point_3d: &dyn Fn(&PointDataRecord) -> Point3D,
             dtm: &mut DigitalTerrainModel, 
+            z_resolution: f64,
             post_box: &Sender<ocad::Object>,
             verbose: bool) {
 
@@ -113,11 +114,11 @@ pub fn find_lakes( records: &Vec<PointDataRecord>, record_to_point_3d: &dyn Fn(&
             average_z.sort_by(|a,b| if a < b { std::cmp::Ordering::Less } else { std::cmp::Ordering::Greater });
             
             let median_of_average_z = average_z[if average_z.len() > 2 { average_z.len()/2 } else { 0 }];
-
+            let m = f64::round(median_of_average_z/z_resolution)*z_resolution;
             for i in triangles_for_this_lake {
-                dtm.points[dtm.vertices[i*3]].z = median_of_average_z;
-                dtm.points[dtm.vertices[i*3+1]].z = median_of_average_z;
-                dtm.points[dtm.vertices[i*3+2]].z = median_of_average_z;
+                dtm.points[dtm.vertices[i*3]].z = m;
+                dtm.points[dtm.vertices[i*3+1]].z = m;
+                dtm.points[dtm.vertices[i*3+2]].z = m;
                 dtm.terrain[i] = Terrain::Lake;
             }
 

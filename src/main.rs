@@ -148,7 +148,7 @@ fn main() {
 
     // TODO: run cliffs / lakes in parallel.
     cliffs::detect_cliffs(&mut dtm, &ocad_tx, verbose);
-    lakes::find_lakes(&records, &to_point_3d, &mut dtm, &ocad_tx, verbose);
+    lakes::find_lakes(&records, &to_point_3d, &mut dtm, z_scale_factor, &ocad_tx, verbose);
 
     let tx_contours = ocad_tx.clone();
     let contour_thread = thread::spawn(move || {
