@@ -29,7 +29,6 @@ pub enum Segment {
 
 #[derive(Debug,PartialEq)]
 pub enum ObjectType {
-    #[allow(dead_code)]
     Point(f64),
     Area,
     Line(bool),
@@ -84,6 +83,14 @@ impl Object {
                 symbol_number: *symbol_number,
                 segments: vec![],
             },
+        }
+    }
+
+    pub fn point_object(symbol_number: i32, location: &Point, angle: f64) -> Object {
+        Object {
+            object_type: ObjectType::Point(angle),
+            symbol_number,
+            segments: vec![Segment::Move(*location)],
         }
     }
 
