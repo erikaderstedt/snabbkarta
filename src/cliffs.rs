@@ -19,6 +19,33 @@ const MIN_REQUIRED_HEIGHT: f64 = 1.2f64;
 const MIN_REQUIRED_Z_DIFF: f64 = 0.45f64;
 const UNPASSABLE_CLIFF: f64 = 1.5f64; // Height is overestimated
 
+struct Cliff<'a> {
+    halfedges: Vec<Halfedge>,
+    index: usize,
+    dtm: &'a DigitalTerrainModel,
+    indices_for_each_triangle: &'a mut Vec<usize>,
+
+    normals: &'a Vec<[f64;3]>,
+    z_limits: &'a Vec<(f64,f64)>,
+}
+
+impl<'a> Boundary for Cliff<'a> {
+    fn claim(&mut self, triangle: usize) { self.indices_for_each_triangle[triangle] = self.index; }
+    fn push_halfedge(&mut self, h: Halfedge) { self.halfedges.push(h); }
+    fn dtm(&self) -> &DigitalTerrainModel { self.dtm }
+    fn get_halfedges(&self) -> &Vec<Halfedge> { &self.halfedges }
+
+    fn should_recurse(&self, halfedge: Halfedge) -> bool {
+        let t = halfedge / 3;
+        self.indices_for_each_triangle[t] == 0 &&
+        self.normals[t][Z_NORMAL] < MAX_ZNORMAL_FOR_GROW && 
+        !self.dtm.exterior[t] &&
+        self.z_limits[t].1 - self.z_limits[t].0 > MIN_REQUIRED_Z_DIFF &&
+        self.dtm.terrain[t] == Terrain::Unclassified &&
+        self.dtm.length_of_halfedge(halfedge) < MAX_ALLOWED_EDGE
+    }
+}
+
 pub fn detect_cliffs(dtm: &mut DigitalTerrainModel, 
             post_box: &Sender<ocad::Object>,
             verbose: bool) {
@@ -42,15 +69,6 @@ pub fn detect_cliffs(dtm: &mut DigitalTerrainModel,
                 normal[Z_NORMAL] < MAX_ZNORMAL_FOR_SEED { Some(triangle_index) } else { None }
         }).collect();
 
-    let should_grow_cliff = |cliff: &Boundary, halfedge: Halfedge| -> bool {
-        let t = halfedge / 3;
-        cliff.indices_for_each_triangle[t] == 0 &&
-        normals[t][Z_NORMAL] < MAX_ZNORMAL_FOR_GROW && 
-        !cliff.dtm.exterior[t] &&
-        z_limits[t].1 - z_limits[t].0 > MIN_REQUIRED_Z_DIFF &&
-        cliff.dtm.terrain[t] == Terrain::Unclassified &&
-        cliff.dtm.length_of_halfedge(halfedge) < MAX_ALLOWED_EDGE
-    };
 
     let mut cliff_index_per_triangle = vec![0 as usize; dtm.num_triangles];
     
@@ -62,19 +80,19 @@ pub fn detect_cliffs(dtm: &mut DigitalTerrainModel,
         // If it already has a cliff index, skip it.
         if cliff_index_per_triangle[seed_triangle] != 0 { continue };
 
-        let mut cliff = Boundary {
+        let mut cliff = Cliff {
             halfedges: Vec::new(),
-            islands: Vec::new(),
             index: cliff_index,
             dtm: dtm,
             indices_for_each_triangle: &mut cliff_index_per_triangle,
+            normals: &normals, z_limits: &z_limits,
         };
 
-        cliff.grow_from_triangle(seed_triangle, &should_grow_cliff);
-        cliff.split_into_lake_and_islands();
+        cliff.grow_from_seed(seed_triangle);
+        let (halfedges, islands) = cliff.split_into_outer_edge_and_islands();
 
         let height = {
-            let (z_min, z_max) = cliff.halfedges.iter()
+            let (z_min, z_max) = halfedges.iter()
                 .fold((f64::MAX,f64::MIN), |z, h| {
                     let p = dtm.points[dtm.vertices[*h]];
                     (   if p.z < z.0 { p.z } else { z.0 },
@@ -83,7 +101,7 @@ pub fn detect_cliffs(dtm: &mut DigitalTerrainModel,
             z_max - z_min
         };
 
-        if height > MIN_REQUIRED_HEIGHT && cliff.halfedges.len() > 3 {
+        if height > MIN_REQUIRED_HEIGHT && halfedges.len() > 3 {
 
             let incenters: Vec<Point3D> = cliff.indices_for_each_triangle.iter()
             .enumerate()

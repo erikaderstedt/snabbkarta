@@ -24,13 +24,13 @@ const IMPASSABLE_MARSH_LOWER_LIMIT: f64 = RAIN_M*7.0;
 const MIN_AREA_FOR_SEED: f64 = 0.5f64;
 
 #[derive(Debug)]
-enum Marsh {
+enum MarshType {
     Diffuse,
     Normal,
     Impassable,
 }
 
-impl Marsh {
+impl MarshType {
     fn symbol(&self) -> i32 { match self {
         // Self::Diffuse => 310000,
         // Self::Normal => 308000,
@@ -46,6 +46,38 @@ impl Marsh {
         Self::Impassable => (IMPASSABLE_MARSH_LOWER_LIMIT, f64::MAX),
     }}
 }
+
+struct Marsh<'a> {
+    halfedges: Vec<Halfedge>,
+    index: usize,
+    dtm: &'a DigitalTerrainModel,
+    indices_for_each_triangle: &'a mut Vec<usize>,
+
+
+
+    normals: &'a Vec<[f64;3]>,
+    z_limits: &'a Vec<(f64,f64)>,
+}
+
+impl<'a> Boundary for Marsh<'a> {
+    fn claim(&mut self, triangle: usize) { self.indices_for_each_triangle[triangle] = self.index; }
+    fn push_halfedge(&mut self, h: Halfedge) { self.halfedges.push(h); }
+    fn dtm(&self) -> &DigitalTerrainModel { self.dtm }
+    fn get_halfedges(&self) -> &Vec<Halfedge> { &self.halfedges }
+
+    fn should_recurse(&self, halfedge: Halfedge) -> bool {
+        let t = halfedge / 3;
+        self.indices_for_each_triangle[t] == 0 &&
+        self.normals[t][Z_NORMAL] < MAX_ZNORMAL_FOR_GROW && 
+        !self.dtm.exterior[t] &&
+        self.z_limits[t].1 - self.z_limits[t].0 > MIN_REQUIRED_Z_DIFF &&
+        self.dtm.terrain[t] == Terrain::Unclassified &&
+        self.dtm.length_of_halfedge(halfedge) < MAX_ALLOWED_EDGE
+    }
+}
+
+
+
 
 // In Lantmäteriet data, the overlap region between two flight paths offer a large number of small completely flat
 // triangles, owing to the higher point density in these areas. We must ensure that water keeps flowing past these triangles.
@@ -221,10 +253,12 @@ pub fn rain_on(dtm: &mut DigitalTerrainModel,
                         if *absorbed < NORMAL_MARSH_UPPER_LIMIT { Marsh::Normal } else 
                         { Marsh::Impassable };
         let limits = marsh_type.limits();
+
+        // 
         let should_grow = |the_marsh: &Boundary, halfedge: Halfedge| -> bool
             {   let t = halfedge / 3;
-                absorbed_per_sqm[t] >= limits.0 && absorbed_per_sqm[t] <= limits.1 && 
-                the_marsh.indices_for_each_triangle[t] == 0
+                the_marsh.indices_for_each_triangle[t] == 0 &&
+                absorbed_per_sqm[t] >= limits.0 && absorbed_per_sqm[t] <= limits.1
             };
 
         let mut marsh = Boundary {
