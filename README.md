@@ -61,9 +61,37 @@ Start one area at a time -> we don't need to merge two areas.
 OSM or FAST threads should post streams (as Vec<Sweref>)
 All triangles intersecting these lines should be cast as Terrain::Stream. Not just corner points, use interpolation between Sweref points.
 
+# OSM interface
+
+Terrain triangles should be marked as "road" or "stream" from OSM. Or "building". 
+
+Post objects to main thread. Main thread waits until "no more objects" received and triangulation is complete. 
+
+Guess a width for line objects. 
+Add boundary - fill while triangle intersects line rectangle.
+
 # Vegetation 
 
-Assign vegetation points to triangles, just as for water points.
+Assign vegetation points to triangles, just as for water points. Many points - this will likely take some time. It can be started as soon as the triangulation completes.
+
+The result is a triangle per vegetation point. This can be done in parallel. Need to divide list manually, since we want to remember result of last iteration. 
+
+let veg_points = records.iter().map(record_to_point3d).collect();
+let heights_for_veg_points.
+
+let matching_veg_points = 
+
+rayon crate.
+
+For each triangle, get statistics (= number of points, top height). This can also be done in parallel.
+Smooting filter based on the 3+6 adjacent triangles. This can also be done in parallel.
+
+Growing - find yellow (< 1m height), green (large number of points, 2-4 m max height)
+
+If there are a number of islands in yellow - halvöppen mark.
+
+Density in each triangle will have
+
 
 Calculate density, top height for each triangle. Triangles are too small for adequate statistics?
 
@@ -75,3 +103,11 @@ Grow area as long as we are within 1 sigma of height and average triangle size.
 
 Exclusion list: remove intersections with residential land, and meadows.
 
+
+# Contours
+
+add contour structs which have references to above (can be more than one) and below (can be 0-1).
+
+Find super-contour: move down. The first contour triangle that we encounter is the super-contour. We may reach the edge of the map. In this case we must continue along the edge until we reach ourselves (at both points) or our starting point. Or we just give up. 
+
+Depth-first pathfinding.
