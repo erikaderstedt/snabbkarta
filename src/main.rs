@@ -22,7 +22,7 @@ mod boundary;
 mod meridians;
 mod cliffs;
 mod contours;
-mod marshes;
+mod water_model;
 
 use sweref::Sweref;
 use wgs84::Wgs84;
@@ -158,7 +158,7 @@ fn main() {
     };
 
     meridians::add_meridians(&bounding_box, magnetic_declination+meridian_convergence, &ocad_tx, verbose);
-    marshes::detect_marshes_in(&mut dtm, &ocad_tx, &Sweref::from(&middle_of_map), verbose);
+    water_model::rain_on(&mut dtm, &ocad_tx, verbose);
 
     preexisting_map_thread.join().expect("Unable to finish pre-existing map thread.");
 

@@ -53,35 +53,52 @@ struct Marsh<'a> {
     dtm: &'a DigitalTerrainModel,
     indices_for_each_triangle: &'a mut Vec<usize>,
 
+    min_z_of_wet_triangles: f64,
+    max_z_of_wet_triangles: f64,
 
+    water_lower_limit: f64,
+    water_upper_limit: f64,
 
-    normals: &'a Vec<[f64;3]>,
     z_limits: &'a Vec<(f64,f64)>,
+
+    absorbed_water: &'a Vec<f64>,
+}
+
+impl<'a> Marsh<'a> {
+    fn absorbed_water_in_range(&self, t: usize) -> bool {
+        self.absorbed_water[t] >= self.water_lower_limit && self.absorbed_water[t] <= self.water_upper_limit
+    }
 }
 
 impl<'a> Boundary for Marsh<'a> {
     fn claim(&mut self, triangle: usize) { self.indices_for_each_triangle[triangle] = self.index; }
-    fn push_halfedge(&mut self, h: Halfedge) { self.halfedges.push(h); }
+    
+    fn push_halfedge(&mut self, h: Halfedge) { 
+        let t = h / 3;
+        if self.absorbed_water_in_range(t) {
+            let z = self.z_limits[t];
+            if z.0 < self.min_z_of_wet_triangles { self.min_z_of_wet_triangles = z.0 }
+            if z.1 > self.max_z_of_wet_triangles { self.max_z_of_wet_triangles = z.1 }
+        }
+        self.halfedges.push(h); 
+    }
+
     fn dtm(&self) -> &DigitalTerrainModel { self.dtm }
     fn get_halfedges(&self) -> &Vec<Halfedge> { &self.halfedges }
 
     fn should_recurse(&self, halfedge: Halfedge) -> bool {
         let t = halfedge / 3;
         self.indices_for_each_triangle[t] == 0 &&
-        self.normals[t][Z_NORMAL] < MAX_ZNORMAL_FOR_GROW && 
-        !self.dtm.exterior[t] &&
-        self.z_limits[t].1 - self.z_limits[t].0 > MIN_REQUIRED_Z_DIFF &&
         self.dtm.terrain[t] == Terrain::Unclassified &&
-        self.dtm.length_of_halfedge(halfedge) < MAX_ALLOWED_EDGE
+        !self.dtm.exterior[t] &&
+        (self.absorbed_water_in_range(t) || 
+        (self.z_limits[t].0 > self.min_z_of_wet_triangles && self.z_limits[t].0 < self.max_z_of_wet_triangles &&
+            self.z_limits[t].1 > self.min_z_of_wet_triangles && self.z_limits[t].1 < self.max_z_of_wet_triangles ))
     }
 }
 
-
-
-
 // In Lantmäteriet data, the overlap region between two flight paths offer a large number of small completely flat
 // triangles, owing to the higher point density in these areas. We must ensure that water keeps flowing past these triangles.
-
 
 pub fn rain_on(dtm: &mut DigitalTerrainModel,             
                 post_box: &Sender<ocad::Object>,
@@ -99,8 +116,6 @@ pub fn rain_on(dtm: &mut DigitalTerrainModel,
 
     let ratios: Vec<[f64;3]> = dtm.normals().into_iter().enumerate()
         .map(|(t,n)| -> [f64;3] {
-            // Calculate resultant vector of normal + gravity.
-            let resultant = Point3D { x: n[0], y: n[1], z: n[2] - 1.0f64 };
 
             let p = [dtm.points[dtm.vertices[t*3+0]], dtm.points[dtm.vertices[t*3+1]], dtm.points[dtm.vertices[t*3+2]]];
             let a = p[0].distance_3d_to(&p[1]);
@@ -133,62 +148,6 @@ pub fn rain_on(dtm: &mut DigitalTerrainModel,
     }
    
     let z_lim = dtm.z_limits();
-    
-    // for t in 0..dtm.num_triangles {
-    //     if z_lim[t].0 == z_lim[t].1 /*ratios[t].iter().sum::<f64>() < 0.001 */&& dtm.terrain[t] != Terrain::Lake {
-    //         // let p = [dtm.points[dtm.vertices[t*3+0]], dtm.points[dtm.vertices[t*3+1]], dtm.points[dtm.vertices[t*3+2]]];
-    //         // println!("{} {:?} {:?}", t, p, ratios[t]);
-    //         let p0 = dtm.points[dtm.vertices[t*3]];
-    //         let p0_sweref = Sweref {east: p0.x, north: p0.y };
-    //         let pob = ocad::Object::point_object(205000, &p0_sweref, 0f64);
-    //         post_box.send(pob).expect("Unable to send object");
-    //     }
-    // }
-
-    // return;
-
-    // let normals = dtm.normals();
-
-
-    // for (t,z) in z_lim.iter().enumerate().skip(1500000) {
-
-    //     if z.1 - z.0 > 0.6 {
-    //         let n = normals[t];
-    //         let resultant = Point3D { x: n[0], y: n[1], z: n[2] - 1.0f64 };
-
-    //         let p = [dtm.points[dtm.vertices[t*3+0]], dtm.points[dtm.vertices[t*3+1]], dtm.points[dtm.vertices[t*3+2]]];
-    //         let a = p[0].distance_3d_to(&p[1]);
-    //         let b = p[1].distance_3d_to(&p[2]);
-    //         let c = p[2].distance_3d_to(&p[0]);
-    //         let s = a + b + c;
-
-    //         let incenter = Point3D {
-    //             x: (a * p[0].x + b * p[1].x + c * p[2].x)/s,
-    //             y: (a * p[0].y + b * p[1].y + c * p[2].y)/s,
-    //             z: (a * p[0].z + b * p[1].z + c * p[2].z)/s,
-    //         };
-    //         println!("{} {:?}", t, resultant);
-    //         println!("{:?}\n{:?}\n{:?}\n{:?}", p[0] - incenter, p[1] - incenter, p[2]-incenter, ratios[t]);
-
-    //         for i in 0..3 {
-    //             println!("------- {} -------", i);
-    //             let a = p[i];
-    //             println!("\ta: {:?}",a-incenter);
-    //             let ab = p[i.next()] - a;
-    //             println!("\tab: {:?}",ab);
-    //             let ap = incenter - a;
-    //             println!("\tap: {:?}",ap);
-    //             let r = ap.dot(&ab) / ab.dot(&ab);
-    //             println!("\tR: {}", r);
-    //             let projected = Point3D { x: a.x + r*ab.x, y: a.y + r*ab.y, z: a.z + r*ab.z, };
-    //             println!("\tProjected: {:?}", projected-incenter);
-    //             let ip = (projected - incenter).normalized();
-    //             println!("\tip: {:?}", ip);
-    //             println!("\tGravity dot ip: {}", resultant.dot(&ip));
-    //         }
-    //         panic!("Dne");
-    //     }
-    // }
 
     let mut iterations = 0;
     while water_per_triangle.iter().sum::<f64>() > ITERATE_UNTIL_ONLY_THIS_MUCH_WATER_REMAINS {
@@ -232,15 +191,9 @@ pub fn rain_on(dtm: &mut DigitalTerrainModel,
     let mut assigned_triangles = vec![0usize;dtm.num_triangles];
 
     let mut marsh_index = 1;
+    let mut added_marshes = 0;
 
     for (triangle, absorbed) in absorbed_per_sqm.iter().enumerate() {
-
-        // let p0 = dtm.points[dtm.vertices[triangle*3]];
-        // let p0_sweref = Sweref { east: p0.x, north: p0.y };
-        // let pob = ocad::Object::point_object(205000, &p0_sweref, 0f64);
-        // post_box.send(pob).expect("Unable to send object");
-
-        // continue;
 
         if  assigned_triangles[triangle] != 0
             || *absorbed < DIFFUSE_MARSH_LOWER_LIMIT
@@ -254,21 +207,22 @@ pub fn rain_on(dtm: &mut DigitalTerrainModel,
                         { Marsh::Impassable };
         let limits = marsh_type.limits();
 
-        // 
-        let should_grow = |the_marsh: &Boundary, halfedge: Halfedge| -> bool
-            {   let t = halfedge / 3;
-                the_marsh.indices_for_each_triangle[t] == 0 &&
-                absorbed_per_sqm[t] >= limits.0 && absorbed_per_sqm[t] <= limits.1
-            };
-
-        let mut marsh = Boundary {
+        let mut marsh = Marsh {
             halfedges: Vec::new(),
-            islands: Vec::new(),
             index: marsh_index,
             dtm: dtm,
             indices_for_each_triangle: &mut assigned_triangles,
+            z_limits: &z_lim,
+            absorbed_water: &absorbed_per_sqm,
+            
+            min_z_of_wet_triangles: f64::MAX,
+            max_z_of_wet_triangles: f64::MIN,
+
+            water_lower_limit: limits.0,
+            water_upper_limit: limits.1,
         };
-        marsh.grow_from_triangle(triangle, &should_grow);
+
+        marsh.grow_from_seed(triangle);
 
         //marsh.split_into_lake_and_islands();
         // println!("{} {} {}", triangle, absorbed, dtm.areas[triangle]);
@@ -282,18 +236,19 @@ pub fn rain_on(dtm: &mut DigitalTerrainModel,
         // }
         if marsh.halfedges.len() > 3 {
         
-        //println!("{:?} {} {} {:5.2} {:?} {:?}", ratios[triangle], triangle, marsh.halfedges.len(), absorbed, marsh_type, limits.0);
-        ocad::post_objects_without_clipping(
-            marsh.extract_vertices(), 
-            &vec![ocad::GraphSymbol::Fill(marsh_type.symbol())],
-            &post_box);
+            //println!("{:?} {} {} {:5.2} {:?} {:?}", ratios[triangle], triangle, marsh.halfedges.len(), absorbed, marsh_type, limits.0);
+            ocad::post_objects_without_clipping(
+                marsh.extract_vertices(), 
+                &vec![ocad::GraphSymbol::Fill(marsh_type.symbol())],
+                &post_box);
+            added_marshes = added_marshes + 1;
         }
         
         marsh_index = marsh_index + 1;
     }
 
     if verbose {
-        println!("[{}] {} marshes added.", &module, marsh_index - 1);
+        println!("[{}] {} marshes added.", &module, added_marshes);
     }
 
 }
