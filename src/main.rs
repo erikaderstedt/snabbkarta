@@ -134,7 +134,9 @@ fn main() {
         }
     });
 
-    let records: Vec<las::PointDataRecord> = matches.free.iter().map(|x| las::PointDataRecord::load_from(Path::new(&x))).flatten().collect();
+    let records: Vec<las::PointDataRecord> = matches.free.iter().map(|x| 
+        las::PointDataRecord::load_from(Path::new(&x), x.ends_with(".laz")).expect("Unable to read point data records from LAS file.")
+    ).flatten().collect();
     println!("[{}] {} point data records in {} files.", &module, records.len(), matches.free.len());
 
     let to_point_3d = move |record: &las::PointDataRecord| Point3D {

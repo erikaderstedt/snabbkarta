@@ -5,6 +5,8 @@ use std::path::Path;
 use std::io::SeekFrom;
 use std::fs::File;
 use super::ffi_helpers::{read_instance, read_instances};
+use std::convert::TryInto;
+use laz;
 
 #[repr(C, packed)]
 pub struct LAS_File_Header {
@@ -73,14 +75,47 @@ pub struct PointDataRecord {
     gps_time: f64,
 }
 
+#[repr(C, packed)]
+struct Lasvlr {
+    reserved: u16,
+    userid: [u8; 16],
+    record_id: u16,
+    record_length_after_header: u16,
+    description: [u8;32],
+}
+
+
 impl PointDataRecord {
-    pub fn load_from(path: &Path) -> Vec<PointDataRecord> {
-        let header = LAS_File_Header::new(path);
-        let mut file = File::open(path).unwrap(); 
+    pub fn load_from(path: &Path, compressed: bool) -> std::io::Result<Vec<PointDataRecord>> {
+        let mut file = File::open(path).unwrap();
+        let header: LAS_File_Header = read_instance(&mut file).expect("Unable to read LAS file header.");
 
-        file.seek(SeekFrom::Start(header.offset_to_point_data.into())).unwrap();
+        if compressed {
+            let number_of_points = header.number_of_point_records as usize;
+            let _vlr_header: Lasvlr = read_instance(&mut file).expect("Unable to read vlr");
+            let vlr = laz::LazVlr::read_from(&mut file).unwrap();            
+            file.seek(SeekFrom::Start(header.offset_to_point_data.into())).unwrap();
+        
+            let mut buffer: Vec<u8> = Vec::new();
+            // read the whole file
+            file.read_to_end(&mut buffer).expect("Unable to read to end");
+            // The offset to the chunk table (first i64) is relative to the beginning of the file, but we are passing
+            // in just the point information. We need to subtract how much we've consumed up until now.
+            let offset: i64 = i64::from_le_bytes(buffer[..8].try_into().expect("Buffer too short"));
+            let amended_offset: i64 = offset - (header.offset_to_point_data as i64);
+            let b = amended_offset.to_le_bytes();
+            for j in 0..8 { buffer[j] = b[j]; }
 
-        read_instances(&mut file, header.number_of_point_records as usize).expect("Unable to read point data records from LAS file.")
+            let output_size = number_of_points * (vlr.items_size() as usize);
+            let mut output = vec![0u8; output_size];
+            laz::las::laszip::par_decompress_buffer(&buffer, &mut output, &vlr).expect("Unable to decompress");
+        
+            let mut c = std::io::Cursor::new(output);
+            read_instances(&mut c, number_of_points)
+        } else {
+            file.seek(SeekFrom::Start(header.offset_to_point_data.into())).unwrap();
+            read_instances(&mut file, header.number_of_point_records as usize)
+        }
     } 
 }
 
