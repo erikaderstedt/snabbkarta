@@ -29,7 +29,7 @@ impl<'a> Boundary for Lake<'a> {
         let triangle = halfedge / 3;
         self.indices_for_each_triangle[triangle] & LAKE_INDEX_MASK == 0 && 
         self.dtm.terrain[triangle] == Terrain::Unclassified &&
-            (self.normals[t][Z_NORMAL] >= Z_NORMAL_REQUIREMENT ||
+            (self.normals[triangle][Z_NORMAL] >= Z_NORMAL_REQUIREMENT ||
             (self.dtm.length_of_halfedge(halfedge) > 5.0 && !self.dtm.exterior[triangle]) || // TODO: also not exterior
             self.indices_for_each_triangle[triangle] & TRIANGLE_CONTAINS_WATER_POINT > 0)
     }
@@ -80,7 +80,7 @@ pub fn find_lakes( records: &Vec<PointDataRecord>, record_to_point_3d: &dyn Fn(&
         
         if  triangle == EMPTY || 
             (lake_indices_for_triangles[triangle] & LAKE_INDEX_MASK) != 0 ||
-            normals[t][Z_NORMAL] < Z_NORMAL_REQUIREMENT {
+            normals[triangle][Z_NORMAL] < Z_NORMAL_REQUIREMENT {
             continue; 
         }
 

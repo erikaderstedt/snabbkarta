@@ -63,6 +63,14 @@ impl Point3D {
         self.x*other.x + self.y*other.y + self.z*other.z
     }
 
+    pub fn cross(&self, other: &Point3D) -> Point3D {
+        Point3D { 
+            x: self.y*other.z - self.z*other.y,
+            y: self.x*other.z - self.z*other.x,
+            z: self.x*other.y - self.y*other.x,
+        }
+    }
+
     pub fn normalized(&self) -> Point3D {
         let f = f64::sqrt(self.dot(self));
         Point3D { x: self.x / f, y: self.y / f, z: self.z / f, }

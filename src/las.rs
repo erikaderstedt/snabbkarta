@@ -53,7 +53,7 @@ impl LAS_File_Header {
     pub fn new(path: &Path) -> LAS_File_Header {
 
         let mut file = match File::open(path) {
-            Err(why) => panic!("Couldn't open {}: {}", path.display(), why.description()),
+            Err(why) => panic!("Couldn't open {}: {:?}", path.display(), why),
             Ok(file) => file,
         };
 
