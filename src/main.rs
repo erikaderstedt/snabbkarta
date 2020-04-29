@@ -160,7 +160,7 @@ fn main() {
     };
 
     meridians::add_meridians(&bounding_box, magnetic_declination+meridian_convergence, &ocad_tx, verbose);
-    water_model::rain_on(&mut dtm, &ocad_tx, verbose);
+    //water_model::rain_on(&mut dtm, &ocad_tx, verbose);
 
     preexisting_map_thread.join().expect("Unable to finish pre-existing map thread.");
 

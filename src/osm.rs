@@ -68,8 +68,8 @@ pub fn load_osm(southwest: &Wgs84, northeast: &Wgs84, file: &Sender<ocad::Object
             t = match (&tag.key[..], &tag.val[..]) {
                 ("wires","single") => vec![GraphSymbol::Stroke(510000,true)],
                 ("route","power") if t.len() == 0 => vec![GraphSymbol::Stroke(511000,true)],              
-                // ("wetland","bog") =>  vec![GraphSymbol::Stroke(415000,false), GraphSymbol::Fill(307000)],
-                // ("wetland","swamp") => vec![GraphSymbol::Fill(308000)],
+                ("wetland","bog") =>  vec![GraphSymbol::Stroke(415000,false), GraphSymbol::Fill(307000)],
+                ("wetland","swamp") => vec![GraphSymbol::Fill(308000)],
                 ("landuse","meadow") => vec![GraphSymbol::Stroke(415000,false), GraphSymbol::Fill(412000)],
                 _ => t,
             };
@@ -104,8 +104,8 @@ pub fn load_osm(southwest: &Wgs84, northeast: &Wgs84, file: &Sender<ocad::Object
                 ("highway","primary") => vec![GraphSymbol::Stroke(502002,false)],
                 ("highway", _) => vec![GraphSymbol::Stroke(503000,false)],
                 ("building",_) => vec![GraphSymbol::Fill(521000)],
-                // ("wetland","bog") => vec![GraphSymbol::Stroke(415000,false), GraphSymbol::Fill(307000)],
-                // ("wetland",_) => vec![GraphSymbol::Stroke(415000,false), GraphSymbol::Fill(308000)],
+                ("wetland","bog") => vec![GraphSymbol::Stroke(415000,false), GraphSymbol::Fill(307000)],
+                ("wetland",_) => vec![GraphSymbol::Stroke(415000,false), GraphSymbol::Fill(308000)],
                 ("power","line") => vec![GraphSymbol::Stroke(510000,true)],
                 ("waterway","stream") => vec![GraphSymbol::Stroke(305000,false)],
                 ("waterway","ditch") => vec![GraphSymbol::Stroke(306000,false)],
