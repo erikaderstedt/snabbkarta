@@ -8,6 +8,7 @@ use std::thread;
 use std::sync::mpsc::{channel,Receiver,Sender};
 
 mod las;
+mod rek;
 mod sweref; mod wgs84;
 mod wmm;
 mod osm;
@@ -22,7 +23,6 @@ mod boundary;
 mod meridians;
 mod cliffs;
 mod contours;
-mod water_model;
 
 use sweref::Sweref;
 use wgs84::Wgs84;
@@ -43,6 +43,7 @@ fn main() {
     let mut opts = Options::new();
     opts.optflag("q", "quiet", "hide additional information while running");
     opts.optopt("s", "", "shapefiles", "path to a folder containing Lantmäteriet shapefiles.");
+    opts.optflag("r", "rek", "create a .rek file for use with VirtuaRek");
     opts.optflag("h", "help", "show this help menu");
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => { m }
@@ -59,6 +60,7 @@ fn main() {
     }
 
     let shp_path = matches.opt_str("s");
+    let output_rek_file = matches.opt_present("r");
 
     let appname = match verbose { false => "Snabbkarta", true => r#"
    _____             __    __    __              __       
@@ -152,6 +154,17 @@ fn main() {
     cliffs::detect_cliffs(&mut dtm, &ocad_tx, verbose);
     lakes::find_lakes(&records, &to_point_3d, &mut dtm, z_scale_factor, &ocad_tx, verbose);
 
+    // Divide DTM into 50x50 m sections and save triangles, points. In blocks.
+
+    // struct Block 
+    //      file offset
+    //      number of points
+    //      number of triangles
+    //      x_index
+    //      y_index
+
+
+
     let contour_thread = {
         let tx_contours = ocad_tx.clone();
         let dtm_clone = dtm.clone();
@@ -160,7 +173,7 @@ fn main() {
     };
 
     meridians::add_meridians(&bounding_box, magnetic_declination+meridian_convergence, &ocad_tx, verbose);
-    //water_model::rain_on(&mut dtm, &ocad_tx, verbose);
+    // //water_model::rain_on(&mut dtm, &ocad_tx, verbose);
 
     preexisting_map_thread.join().expect("Unable to finish pre-existing map thread.");
 
@@ -168,4 +181,14 @@ fn main() {
 
     ocad_tx.send(ocad::Object::termination()).expect("Unable to tell OCAD thread to finish.");
     ocad_thread.join().expect("Unable to finish OCAD thread.");
+
+    // Load 
+    if output_rek_file {
+        let rek_output_path = Path::new(&f).with_extension("rek");
+
+        rek::save_dtm_to_rek(&dtm, 
+            meridian_convergence + magnetic_declination, 
+            &Path::new(&f).with_extension("ocd"),
+            &rek_output_path);
+    }
 }

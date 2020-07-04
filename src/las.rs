@@ -1,5 +1,4 @@
 use std;
-use std::error::Error;
 use std::io::prelude::*;
 use std::path::Path;
 use std::io::SeekFrom;

@@ -111,3 +111,18 @@ add contour structs which have references to above (can be more than one) and be
 Find super-contour: move down. The first contour triangle that we encounter is the super-contour. We may reach the edge of the map. In this case we must continue along the edge until we reach ourselves (at both points) or our starting point. Or we just give up. 
 
 Depth-first pathfinding.
+
+# Status 2020-04-28
+
+Still far away from target status as mapmaker.
+
+- Subpar performance on old Lantmäteriet files. 
+- A lot of work remains on the drone software. 
+- New Laserdata Skog with higher point density is coming.
+
+1. Start tuning on newer LAS files. Files for Gothenburg were recently released - there might be areas which overlap with maps that I have access to.
+2. Start working on the carry rig for the LIDAR. Goal is to create LAS files before July 1st.
+3. Software to walk around in the DTM. This will be needed either way, but otoh will be yet another new project started before other parts are finished.
+
+Option 1. Check which files are available.
+

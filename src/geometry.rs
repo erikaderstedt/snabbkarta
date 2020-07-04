@@ -63,8 +63,14 @@ impl Rectangle {
         self.contains(&other.southwest) || 
         self.contains(&other.southeast()) || 
         self.contains(&other.northeast) ||
-        self.contains(&other.northwest())
+        self.contains(&other.northwest()) ||
+        other.contains(&self.southwest) // In case we are completely inside other.
     }
+
+    pub fn max_x(&self) -> f64 { return self.northeast.east }
+    pub fn max_y(&self) -> f64 { return self.northeast.north }
+    pub fn min_x(&self) -> f64 { return self.southwest.east }
+    pub fn min_y(&self) -> f64 { return self.southwest.north }
 
 }
 

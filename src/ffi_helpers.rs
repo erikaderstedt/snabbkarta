@@ -35,3 +35,7 @@ pub fn write_instances<T: Sized>(x: &Vec<T>, writer: &mut dyn Write) -> std::io:
 pub fn ftell(file: &mut dyn Seek) -> u32 {
     file.seek(SeekFrom::Current(0)).expect("Unable to obtain file position").try_into().expect("File size too large")
 }
+
+pub fn fseek(file: &mut dyn Seek, pos: u32) {
+    file.seek(SeekFrom::Start(pos as u64)).expect("Unable to obtain file position");
+}

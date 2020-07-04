@@ -236,4 +236,16 @@ impl DigitalTerrainModel {
             }
         }
     }
+
+    // pub fn save_to_file(&self) {
+
+    //     // First determine the triangles that go into each block. Two corners must be within the assigned area.
+
+    //     struct Block {
+    //         x_index: usize,
+    //         y_index: usize,
+    //         points
+    //     }
+
+    // }
 }
