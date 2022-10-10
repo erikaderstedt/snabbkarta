@@ -1,4 +1,5 @@
-use super::dtm::{Point3D, DigitalTerrainModel,TriangleWalk,Halfedge, Terrain,Z_NORMAL};
+use super::dtm::{DigitalTerrainModel,TriangleWalk,Halfedge, Terrain,Z_NORMAL};
+use crate::geometry::Point3D;
 use super::ocad;
 use colored::*;
 use std::sync::mpsc::{channel,Receiver,Sender};

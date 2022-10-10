@@ -1,6 +1,121 @@
 use super::Sweref;
 use nalgebra::DMatrix;
-use super::dtm::Point3D;
+use crate::las::LAS_File_Header;
+
+pub struct PointConverter {
+    x_scale_factor: f64,
+    y_scale_factor: f64,
+    z_scale_factor: f64,
+    x_offset: f64,
+    y_offset: f64,
+    z_offset: f64,
+}
+
+impl PointConverter {
+
+    pub fn record_coordinates_to_point_3d(&self, record_coordinates: &[i32;3]) -> Point3D {
+        Point3D {
+            x: ((record_coordinates[0] as f64) * self.x_scale_factor + self.x_offset),
+            y: ((record_coordinates[1] as f64) * self.y_scale_factor + self.y_offset),
+            z: ((record_coordinates[2] as f64) * self.z_scale_factor + self.z_offset),
+        }
+    }
+
+    pub fn point_3d_to_record_coordinates(&self, point: &Point3D) -> [i32;3] {
+        [((point.x - self.x_offset) / self.x_scale_factor) as i32,
+        ((point.y - self.y_offset) / self.y_scale_factor) as i32,
+        ((point.z - self.z_offset) / self.z_scale_factor) as i32]
+    }
+
+    pub fn from(header: &LAS_File_Header) -> PointConverter {
+        PointConverter {
+            x_scale_factor: header.x_scale_factor,
+            x_offset : header.x_offset,
+            y_scale_factor : header.y_scale_factor,
+            y_offset : header.y_offset,
+            z_scale_factor : header.z_scale_factor,
+            z_offset : header.z_offset,
+        }
+    }
+
+    pub fn z_resolution(&self) -> f64 { self.z_scale_factor }
+
+}
+
+#[derive(Copy,Clone,Debug,PartialEq)]
+pub struct Point3D {
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
+}
+
+impl Point3D {
+    pub fn to_the_left_of(&self, p0: &Point3D, p1: &Point3D) -> bool {
+        let vx = p1.x - p0.x;
+        let vy = p1.y - p0.y;
+        let toselfx = self.x - p0.x;
+        let toselfy = self.y - p0.y;
+        vx*toselfy - vy*toselfx > 0f64
+    }
+
+    pub fn distance_2d_to(&self, other: &Point3D) -> f64 {
+        let dx = other.x - self.x;
+        let dy = other.y - self.y;
+        f64::sqrt(dx*dx + dy*dy)
+    }
+
+    pub fn distance_3d_to(&self, other: &Point3D) -> f64 {
+        let dx = other.x - self.x;
+        let dy = other.y - self.y;
+        let dz = other.z - self.z;
+        f64::sqrt(dx*dx + dy*dy + dz*dz)
+    }
+
+    pub fn dot(&self, other: &Point3D) -> f64 {
+        self.x*other.x + self.y*other.y + self.z*other.z
+    }
+
+    pub fn cross(&self, other: &Point3D) -> Point3D {
+        Point3D { 
+            x: self.y*other.z - self.z*other.y,
+            y: self.x*other.z - self.z*other.x,
+            z: self.x*other.y - self.y*other.x,
+        }
+    }
+
+    pub fn normalized(&self) -> Point3D {
+        let f = f64::sqrt(self.dot(self));
+        Point3D { x: self.x / f, y: self.y / f, z: self.z / f, }
+    }
+}
+
+impl std::ops::Sub for Point3D {
+    type Output = Point3D;
+
+    fn sub(self, other: Point3D) -> Point3D {
+        Point3D { x: self.x - other.x, y: self.y - other.y, z: self.z - other.z, }
+    }
+}
+
+#[derive(Clone,Debug)]
+pub struct Bounds {
+    pub lower: Point3D,
+    pub upper: Point3D,
+}
+
+impl Bounds {
+    pub fn contains_2d(&self, point: &Point3D) -> bool {
+        self.lower.x <= point.x && point.x <= self.upper.x &&
+        self.lower.y <= point.y && point.y <= self.upper.y
+    }
+
+    pub fn outset_by(&self, distance: f64) -> Bounds {
+        Bounds {
+            lower: Point3D { x: self.lower.x - distance, y: self.lower.y - distance, z: self.lower.z - distance, },
+            upper: Point3D { x: self.upper.x + distance, y: self.upper.y + distance, z: self.upper.z + distance, },
+        }
+    }
+}
 
 #[derive(Clone,Copy,Debug)]
 pub struct Rectangle {

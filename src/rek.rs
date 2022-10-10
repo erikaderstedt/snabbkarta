@@ -230,7 +230,7 @@ pub fn save_dtm_to_rek(dtm: &DigitalTerrainModel,
     ocad_file.read_to_end(&mut ocad_file_data).expect("Unable to read OCAD file.");
     file.write_all(&ocad_file_data).expect("Unable to append OCAD file data to REK file.");
 
-    println!("Writing {} bytes of ocad data at {}.", ocad_file_data.len(), rek_info.ocad_file_start);
+    // println!("Writing {} bytes of ocad data at {}.", ocad_file_data.len(), rek_info.ocad_file_start);
 
     fseek(&mut file, 0u32);
     write_instance(&rek_info, &mut file).expect("Unable to write REK header.");

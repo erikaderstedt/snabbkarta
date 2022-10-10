@@ -23,6 +23,80 @@ Also need a better (or more tailored) Bezier fitting algoritm, that doesn't intr
 Port or use bezier.c from C code.
 Start with march identification? Once that is done then maybe maps are somewhat runnable. MVP.
 
+## Water 2
+
+Sample height onto rectangular grids 1x1 m. 2500x2500 px for one block. Can run in parallel if there are multiple blocks.
+
+### AI model
+
+Input:
+    - height (scaled to 1 at (min+max)/2, and going from 0 to 2)
+    - max height of vegetation returns in 5x5 area (divided by 20)
+    - contains LAS water points (0 or 1)
+    - has no ground points (0 or 1)
+    - number of ground returns vs num vegetation returns (averaged over a 5x5 m area), expressed as a quotient (vegetation returns / (ground returns + 1)).
+    - standard deviation of 
+
+Output:
+    wetness (0 not wet, 0.25 diffuse marsh, 0.5 marsh, 0.75 impassable marsh, 1.0 lake)
+    open 0/1
+    green (0 not green, 0.5 light green, 1.0 dark green)
+    road 0/1
+    building 0/1
+    ditch 0/1
+    stone wall 0/1
+    smoothness (0 - farmland or paved road, 1 - anything else)
+
+Use hexes, and provide 90 + 1 surrounding points. That's 5 m out. 364 input values. Training data can be augmented 6 times by rotation, and another 6 times with mirroring. 
+
+Fully connected network. 2 hidden layers, 120 and 40 nodes each, and 8 outputs. `91*5*120 + 120*40 + 40*8 = 59720` weights. This seems like a very reasonable number of weights. 
+
+Training data: "painting" the correct classification based on LAS data + old maps. Data can be augmented by rotation and mirroring. A large challenge is that some features may not be properly aligned on the old map. Requires hand-painting each feature. 2500m side means 1e7 pixels to classify. Important to have a "fill" tool and an adjustable brush size.
+
+Maybe do a second step, with the classification from the previous step as input, but looking over a larget 10 m (331*8 inputs). 
+
+# Training generator
+Each hex is represented with 6 triangles. Each corner vertex is the average of the three hex centers. 
+Display a roughly 25x25 m large 3D cutout, that can be rotated, and the corresponding OCAD texture flat, to the side. Each hex needs to be painted with one of the following colors:
+
+- diffuse marsh
+- marsh
+- open diffuse marsh
+- open marsh
+- impassable marsh
+- lake
+- farmland
+- open land
+- light green
+- dark green
+- dirt road
+- paved road
+- stone wall
+- ditch
+- building
+
+There will be 100*100 = 10000 such cutouts. 1 per minute, 50 per hour means 25 days at 8 hr/day. Summer job. Can also hire some other kid (but must know orienteering maps). Fritjof can do Guddehjälm or old SM 2013 map. I can do Fontin. Kalle, Wilma, m.fl.
+
+Can generate 625*12 = 7500 training points per minute. Need at least 5M, that means 666 minutes = 11 hr. Very reasonable.
+
+The training generator needs to be written in Swift as a Mac GUI app.
+
+Generate inputs per hex point (for circles around each hex center):
+ - calculate a list of hex center points for a given bounding box.
+ - generate data for each center point
+ - 
+
+Add command-line argument to snabbkarta for saving an intermediate file with input data. "map_ml_input_data". 
+
+### Language
+
+Interoperability with CoreML is important. We can call Objective-C methods from Rust, and Metal / CoreML has an Objective-C API.
+
+### Parallelization
+
+We can run the ml generation first, which can operate on smaller dtm blocks. Then inference can run in parallel to the full DTM generation.
+
+
 # Cliffs
 
 Cliffs are often "broken" by triangles that are too flat. Allow more flat triangles when growing, but only in the direction of the cliff. Perhaps we should keep track of a plane continually while growing the cliff.

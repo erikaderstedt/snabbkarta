@@ -23,10 +23,12 @@ mod boundary;
 mod meridians;
 mod cliffs;
 mod contours;
+mod ml_input_data;
+mod hexgrid;
 
 use sweref::Sweref;
 use wgs84::Wgs84;
-use dtm::Point3D;
+use geometry::{Point3D,PointConverter};
 
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
@@ -43,7 +45,7 @@ fn main() {
     let mut opts = Options::new();
     opts.optflag("q", "quiet", "hide additional information while running");
     opts.optopt("s", "", "shapefiles", "path to a folder containing Lantmäteriet shapefiles.");
-    opts.optflag("r", "rek", "create a .rek file for use with VirtuaRek");
+    opts.optflag("m", "ml-input-data", "create a .ml-input-data file instead of an OCAD file");
     opts.optflag("h", "help", "show this help menu");
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => { m }
@@ -60,7 +62,7 @@ fn main() {
     }
 
     let shp_path = matches.opt_str("s");
-    let output_rek_file = matches.opt_present("r");
+    let create_ml_data = matches.opt_present("m");
 
     let appname = match verbose { false => "Snabbkarta", true => r#"
    _____             __    __    __              __       
@@ -86,14 +88,7 @@ fn main() {
 
     if verbose { println!("[{}] Writing to {:?}", &module, output_path); }
 
-    let x_scale_factor = headers[0].x_scale_factor;
-    let x_offset = headers[0].x_offset;
-    let y_scale_factor = headers[0].y_scale_factor;
-    let y_offset = headers[0].y_offset;
-    let z_scale_factor = headers[0].z_scale_factor;
-    let z_offset = headers[0].z_offset;
-
-    let height_over_sea_level: f64 = (max_z + min_z)*0.5;
+    let height_over_sea_level: f64 = min_z;
     let bounding_box = geometry::Rectangle { southwest: Sweref { north: min_y, east: min_x, }, northeast: Sweref { north: max_y, east: max_x, }};
     let middle_of_map = Wgs84::from( &bounding_box.middle() );
     let top_of_map = Sweref::from(
@@ -106,7 +101,7 @@ fn main() {
     let southwest_corner = Wgs84::from(&bounding_box.southwest);
 
     if verbose {
-        println!("[{}] Average height over sea level: {:.0} m", &module, height_over_sea_level);
+        println!("[{}] Lowest point over sea level: {:.0} m", &module, height_over_sea_level);
         println!("[{}] Meridian convergence: {:.2}°", &module, meridian_convergence);
         println!("[{}] Magnetic declination: {:.2}°", &module, magnetic_declination);
 
@@ -141,18 +136,36 @@ fn main() {
     ).flatten().collect();
     println!("[{}] {} point data records in {} files.", &module, records.len(), matches.free.len());
 
-    let to_point_3d = move |record: &las::PointDataRecord| Point3D {
-        x: ((record.x as f64) * x_scale_factor + x_offset),
-        y: ((record.y as f64) * y_scale_factor + y_offset),
-        z: ((record.z as f64) * z_scale_factor + z_offset),
-    };
+    let low_vegetation = records.iter().filter(|r| r.classification == 3u8).count(); 
+    let medium_vegetation = records.iter().filter(|r| r.classification == 4u8).count(); 
+    let high_vegetation = records.iter().filter(|r| r.classification == 5u8).count(); 
 
-    let mut dtm = dtm::DigitalTerrainModel::create(&records, &to_point_3d);
+    let ground_points = records.iter().filter(|r| r.classification == 2u8).count(); 
+    let water_points = records.iter().filter(|r| r.classification == 9u8).count(); 
+    let building_points = records.iter().filter(|r| r.classification & 31 == 6u8).count(); 
+
+    let unclassified = records.iter().filter(|r| r.classification == 1u8).count(); 
+
+
+    println!("[{}] {} / {} / {} low / medium / high vegetation points.", &module, low_vegetation, medium_vegetation, high_vegetation);
+    println!("[{}] {} ground and {} water points.", &module, ground_points, water_points);
+    println!("[{}] {} building and {} unclassified points.", &module, building_points, unclassified);
+
+    let point_converter = PointConverter::from(&headers[0]);
+
+
+    let mut dtm = dtm::DigitalTerrainModel::create(&records, &point_converter);
     println!("[{}] DTM triangulation complete, {:?} triangles", &module, dtm.num_triangles);
 
-    // TODO: run cliffs / lakes in parallel.
+    // let hex_grid = hexgrid::HexGrid::covering_bounds(&dtm.bounds, 1.2);
+    // let ml_data = ml_input_data::MachineLearningInputData::construct_hashmap(&records, &point_converter, &dtm, &hex_grid);
+
+    // println!("[{}] {} hex grid points generated.", &module, ml_data.len());
+
+    // TODO: run cliffs / lakes in parallel. Hard to do when they both need mutable references
+    // to the dtm.
     cliffs::detect_cliffs(&mut dtm, &ocad_tx, verbose);
-    lakes::find_lakes(&records, &to_point_3d, &mut dtm, z_scale_factor, &ocad_tx, verbose);
+    lakes::find_lakes(&records, &point_converter, &mut dtm, &ocad_tx, verbose);
 
     // Divide DTM into 50x50 m sections and save triangles, points. In blocks.
 
@@ -164,12 +177,11 @@ fn main() {
     //      y_index
 
 
-
     let contour_thread = {
         let tx_contours = ocad_tx.clone();
         let dtm_clone = dtm.clone();
         thread::spawn(move || {
-            contours::create_contours(dtm_clone, min_z, max_z, z_scale_factor, tx_contours, verbose); })
+            contours::create_contours(dtm_clone, min_z, max_z, point_converter.z_resolution(), tx_contours, verbose); })
     };
 
     meridians::add_meridians(&bounding_box, magnetic_declination+meridian_convergence, &ocad_tx, verbose);
@@ -182,13 +194,11 @@ fn main() {
     ocad_tx.send(ocad::Object::termination()).expect("Unable to tell OCAD thread to finish.");
     ocad_thread.join().expect("Unable to finish OCAD thread.");
 
-    // Load 
-    if output_rek_file {
-        let rek_output_path = Path::new(&f).with_extension("rek");
+    // // Load 
+    let rek_output_path = Path::new(&f).with_extension("rek");
 
-        rek::save_dtm_to_rek(&dtm, 
-            meridian_convergence + magnetic_declination, 
-            &Path::new(&f).with_extension("ocd"),
-            &rek_output_path);
-    }
+    rek::save_dtm_to_rek(&dtm, 
+        meridian_convergence + magnetic_declination, 
+        &Path::new(&f).with_extension("ocd"),
+        &rek_output_path);
 }

@@ -1,5 +1,6 @@
 
-use super::dtm::{DigitalTerrainModel,Halfedge,TriangleWalk,Point3D};
+use super::dtm::{DigitalTerrainModel,Halfedge,TriangleWalk};
+use crate::geometry::Point3D;
 use delaunator::EMPTY;
 use super::Sweref;
 

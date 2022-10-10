@@ -1,4 +1,5 @@
-use super::dtm::{DigitalTerrainModel,Z_NORMAL,Halfedge,Terrain,TriangleWalk, Point3D};
+use super::dtm::{DigitalTerrainModel,Z_NORMAL,Halfedge,Terrain,TriangleWalk};
+use crate::geometry::Point3D;
 use super::ocad;
 use std::sync::mpsc::Sender;
 use super::boundary::Boundary;

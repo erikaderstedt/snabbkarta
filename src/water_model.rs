@@ -1,4 +1,5 @@
-use super::dtm::{DigitalTerrainModel,Terrain,Point3D,Halfedge,TriangleWalk};
+use super::dtm::{DigitalTerrainModel,Terrain,Halfedge,TriangleWalk};
+use crate::geometry::Point3D;
 use delaunator::EMPTY;
 use super::boundary::{Boundary,extract_vertices};
 use std::f64;

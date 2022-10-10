@@ -19,6 +19,8 @@ minreq = { version = "*", features = ["https"] }
 geo = "0.12.2"
 flo_curves = "0.3.1"
 nalgebra = "0.19.0"
+num-traits = "0.2.14"
+rayon = "1.5.0"
 
 [dependencies.laz]
 version = "0.3.0"

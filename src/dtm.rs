@@ -1,6 +1,7 @@
-use super::las::PointDataRecord;
+use crate::las::PointDataRecord;
 use delaunator::{Point,triangulate,EMPTY};
 use std::f64;
+use crate::geometry::{Point3D,Bounds,PointConverter};
 
 pub const Z_NORMAL: usize = 2;
 
@@ -30,61 +31,6 @@ impl TriangleWalk for Halfedge {
     }    
 }
 
-#[derive(Copy,Clone,Debug,PartialEq)]
-pub struct Point3D {
-    pub x: f64,
-    pub y: f64,
-    pub z: f64,
-}
-
-impl Point3D {
-    fn to_the_left_of(&self, p0: &Point3D, p1: &Point3D) -> bool {
-        let vx = p1.x - p0.x;
-        let vy = p1.y - p0.y;
-        let toselfx = self.x - p0.x;
-        let toselfy = self.y - p0.y;
-        vx*toselfy - vy*toselfx > 0f64
-    }
-
-    pub fn distance_2d_to(&self, other: &Point3D) -> f64 {
-        let dx = other.x - self.x;
-        let dy = other.y - self.y;
-        f64::sqrt(dx*dx + dy*dy)
-    }
-
-    pub fn distance_3d_to(&self, other: &Point3D) -> f64 {
-        let dx = other.x - self.x;
-        let dy = other.y - self.y;
-        let dz = other.z - self.z;
-        f64::sqrt(dx*dx + dy*dy + dz*dz)
-    }
-
-    pub fn dot(&self, other: &Point3D) -> f64 {
-        self.x*other.x + self.y*other.y + self.z*other.z
-    }
-
-    pub fn cross(&self, other: &Point3D) -> Point3D {
-        Point3D { 
-            x: self.y*other.z - self.z*other.y,
-            y: self.x*other.z - self.z*other.x,
-            z: self.x*other.y - self.y*other.x,
-        }
-    }
-
-    pub fn normalized(&self) -> Point3D {
-        let f = f64::sqrt(self.dot(self));
-        Point3D { x: self.x / f, y: self.y / f, z: self.z / f, }
-    }
-}
-
-impl std::ops::Sub for Point3D {
-    type Output = Point3D;
-
-    fn sub(self, other: Point3D) -> Point3D {
-        Point3D { x: self.x - other.x, y: self.y - other.y, z: self.z - other.z, }
-    }
-}
-
 #[derive(Clone,PartialEq)]
 pub enum Terrain {
     Unclassified,
@@ -105,6 +51,7 @@ pub struct DigitalTerrainModel {
     pub areas: Vec<f64>,
     pub exterior: Vec<bool>,
     pub terrain: Vec<Terrain>,
+    pub bounds: Bounds,
 }
 
 impl DigitalTerrainModel {
@@ -136,11 +83,11 @@ impl DigitalTerrainModel {
         p0.distance_2d_to(&p1)
     }
 
-    pub fn create(records: &Vec<PointDataRecord>, record_to_point_3d: &dyn Fn(&PointDataRecord) -> Point3D) -> DigitalTerrainModel {
+    pub fn create(records: &Vec<PointDataRecord>, point_converter: &PointConverter) -> DigitalTerrainModel {
 
         let ground_points: Vec<Point3D> = records.iter()
             .filter(|record| record.classification == 2)
-            .map(record_to_point_3d)
+            .map(|record| point_converter.record_coordinates_to_point_3d(&[record.x, record.y, record.z]))
             .collect();
 
         let gp_delaunator: Vec<Point> = ground_points.iter().map(|p| Point { x: p.x, y: p.y, }).collect();
@@ -153,7 +100,10 @@ impl DigitalTerrainModel {
         let min_x = ground_points.iter().map(|p| p.x).fold(0./0., f64::min) + MARGIN;
         let max_y = ground_points.iter().map(|p| p.y).fold(0./0., f64::max) - MARGIN;
         let min_y = ground_points.iter().map(|p| p.y).fold(0./0., f64::min) + MARGIN;
+        let max_z = ground_points.iter().map(|p| p.z).fold(0./0., f64::max);
+        let min_z = ground_points.iter().map(|p| p.z).fold(0./0., f64::min);
 
+        let bounds = Bounds { lower: Point3D { x: min_x, y: min_y, z: min_z }, upper: Point3D { x: max_x, y: max_y, z: max_z } };
         
         let exteriors = triangulation.triangles
             .chunks(3)
@@ -183,7 +133,7 @@ impl DigitalTerrainModel {
             halfedges: triangulation.halfedges.clone(),
             num_triangles: num_triangles,
             terrain: vec![Terrain::Unclassified; num_triangles],
-            exterior: exteriors, areas: areas,
+            exterior: exteriors, areas: areas, bounds
         }
     }
 
@@ -237,15 +187,32 @@ impl DigitalTerrainModel {
         }
     }
 
-    // pub fn save_to_file(&self) {
+    pub fn z_coordinate_at_xy(&self, point: &Point3D) -> f64 {
+        match self.triangle_containing_point(point, 0usize) {
+            None => (self.bounds.upper.z + self.bounds.lower.z) * 0.5f64,
+            Some(triangle) => {
+                let p0 = self.points[self.vertices[triangle*3+0]];
+                let p1 = self.points[self.vertices[triangle*3+1]];
+                let p2 = self.points[self.vertices[triangle*3+2]];
 
-    //     // First determine the triangles that go into each block. Two corners must be within the assigned area.
+                let v = Point3D { x: p1.x-p0.x, y: p1.y-p0.y, z: p1.z-p0.z };
+                let u = Point3D { x: p2.x-p0.x, y: p2.y-p0.y, z: p2.z-p0.z };
+                let nx = u.y*v.z - u.z*v.y;
+                let ny = u.z*v.x - u.x*v.z;
+                let nz = u.x*v.y - u.y*v.x;
+                let l = f64::sqrt(nx*nx + ny*ny + nz*nz);
+                let n = [nx/l, ny/l, nz/l];
 
-    //     struct Block {
-    //         x_index: usize,
-    //         y_index: usize,
-    //         points
-    //     }
+                if n[2] == 0f64 {
+                    // Vertical triangle
+                    (p0.z + p1.z + p2.z) * 0.33f64
+                } else {
+                    // d = n[0]*p0.x + n[1]*p0.y + n[2]*p0.z
+                    // d = n[0]*point.x + n[1]*point.y + n[2]*point.z
+                    (n[0]*p0.x + n[1]*p0.y + n[2]*p0.z - n[0]*point.x - n[1]*point.y) / n[2]
+                }
+            }
+        }
+    }
 
-    // }
 }

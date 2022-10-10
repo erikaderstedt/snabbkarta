@@ -3,7 +3,8 @@ use colored::*;
 use super::ocad;
 use std::sync::mpsc::Sender;
 use super::las::PointDataRecord;
-use super::dtm::{DigitalTerrainModel,Point3D,Halfedge,Terrain,Z_NORMAL};
+use crate::geometry::{Point3D,PointConverter};
+use super::dtm::{DigitalTerrainModel,Halfedge,Terrain,Z_NORMAL};
 use super::boundary::{Boundary,extract_vertices,extract_interior_segments};
 
 const Z_NORMAL_REQUIREMENT: f64 = 0.9993f64;
@@ -35,18 +36,18 @@ impl<'a> Boundary for Lake<'a> {
     }
 }
 
-pub fn find_lakes( records: &Vec<PointDataRecord>, record_to_point_3d: &dyn Fn(&PointDataRecord) -> Point3D,
+pub fn find_lakes( records: &Vec<PointDataRecord>, point_converter: &PointConverter,
             dtm: &mut DigitalTerrainModel, 
-            z_resolution: f64,
             post_box: &Sender<ocad::Object>,
             verbose: bool) {
 
     let module = "LAKE".blue();
     let normals = dtm.normals();
+    let z_resolution = point_converter.z_resolution();
 
     let water_points: Vec<Point3D> = records.iter()
         .filter(|record| record.classification == 9)
-        .map(record_to_point_3d)
+        .map(|record| point_converter.record_coordinates_to_point_3d(&[record.x, record.y, record.z]))
         .collect();
 
     println!("[{}] Creating lakes from {} water points.", &module, water_points.len());

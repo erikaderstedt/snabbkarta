@@ -1,6 +1,6 @@
 use std::f64;
 use super::Wgs84;
-use super::dtm::Point3D;
+use super::geometry::Point3D;
 use geo::Point;
 
 #[derive(Clone,Debug,Copy)]

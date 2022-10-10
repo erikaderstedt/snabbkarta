@@ -1,8 +1,8 @@
-use super::dtm::{DigitalTerrainModel,Z_NORMAL,Halfedge,Terrain, Point3D};
+use super::dtm::{DigitalTerrainModel,Z_NORMAL,Halfedge,Terrain};
 use super::ocad;
 use std::sync::mpsc::Sender;
 use super::boundary::Boundary;
-use super::geometry::Plane;
+use super::geometry::{Plane,Point3D};
 use std::cmp::Ordering;
 use ::geo::{Coordinate,LineString};
 use ::geo::algorithm::simplifyvw::SimplifyVW;
