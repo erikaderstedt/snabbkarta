@@ -107,7 +107,7 @@ impl PointDataRecord {
 
             let output_size = number_of_points * (vlr.items_size() as usize);
             let mut output = vec![0u8; output_size];
-            laz::las::laszip::par_decompress_buffer(&buffer, &mut output, &vlr).expect("Unable to decompress");
+            laz::las::laszip::decompress_buffer(&buffer, &mut output, vlr).expect("Unable to decompress");
         
             let mut c = std::io::Cursor::new(output);
             read_instances(&mut c, number_of_points)
